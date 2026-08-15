@@ -13,6 +13,22 @@ workflows:
         script: |
           xcodebuild -version
           sw_vers
+      - name: Setup Submodules and Build FEX for iOS
+        script: |
+          set -e
+          git submodule update --init FEX
+          git -C FEX submodule update --init External/fmt External/range-v3 External/unordered_dense External/xxhash External/SoftFloat-3e External/cephes External/jemalloc_glibc
+          
+          cmake -B FEX/build-ios -S FEX \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=17.0 \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=False \
+            -DENABLE_LTO=False \
+            -G Ninja
+          
+          cmake --build FEX/build-ios --target FEXCore FEXCore_Base fmt cephes_128bit xxhash softfloat_3e JemallocLibs
       - name: Build iOS Archive (Ad-hoc / Unsigned)
         script: |
           xcodebuild archive \
