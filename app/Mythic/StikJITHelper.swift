@@ -84,9 +84,10 @@ enum StikJITHelper {
 
         // Direct native dual-mapped allocation (Works on SideStore, AltStore, TrollStore, etc.)
         if let region = jit_region_create(poolSize) {
-            if let rx = region.pointee.rx_ptr, let rw = region.pointee.rw_ptr {
-                LogStore.shared.log("Native dual-mapped JIT pool created: RX=\(rx), RW=\(rw), size=\(region.pointee.size / 1024 / 1024)MB", level: .success)
-                return (rx: rx, rw: rw, size: region.pointee.size)
+            if let rx = jit_region_rx_ptr(region), let rw = jit_region_rw_ptr(region) {
+                let sz = jit_region_size(region)
+                LogStore.shared.log("Native dual-mapped JIT pool created: RX=\(rx), RW=\(rw), size=\(sz / 1024 / 1024)MB", level: .success)
+                return (rx: rx, rw: rw, size: sz)
             }
         }
 
