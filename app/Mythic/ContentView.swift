@@ -1120,7 +1120,7 @@ struct ContentView: View {
                 .padding(16)
                 .background(RoundedRectangle(cornerRadius: 14).fill(Color(UIColor.secondarySystemBackground)))
 
-                // Card 3 & 4 Grid: Steam & 3D Benchmark
+                // Card Grid: Steam, 3D Benchmark & Windows Utilities
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
@@ -1159,6 +1159,7 @@ struct ContentView: View {
                             .foregroundColor(.secondary)
                             .lineLimit(2)
                         Button("Run 3D Cube") {
+                            unsetenv("MYTHIC_DESKTOP")
                             setenv("MYTHIC_EXE", "cube-x64.exe", 1)
                             unsetenv("MYTHIC_ARGS")
                             selectedTab = .screen
@@ -1166,6 +1167,60 @@ struct ContentView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.orange)
+                        .font(.caption.weight(.medium))
+                    }
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Image(systemName: "flag.fill")
+                                .font(.title3)
+                                .foregroundColor(.red)
+                            Spacer()
+                        }
+                        Text("Minesweeper")
+                            .font(.subheadline.weight(.semibold))
+                        Text("Classic Windows Minesweeper.")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .lineLimit(2)
+                        Button("Play Winemine") {
+                            unsetenv("MYTHIC_DESKTOP")
+                            setenv("MYTHIC_EXE", "winemine.exe", 1)
+                            unsetenv("MYTHIC_ARGS")
+                            selectedTab = .screen
+                            runWineFullSequence()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.red)
+                        .font(.caption.weight(.medium))
+                    }
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Image(systemName: "chart.bar.xaxis")
+                                .font(.title3)
+                                .foregroundColor(.indigo)
+                            Spacer()
+                        }
+                        Text("Task Manager")
+                            .font(.subheadline.weight(.semibold))
+                        Text("Windows Task Manager & process monitor.")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .lineLimit(2)
+                        Button("Open Taskmgr") {
+                            unsetenv("MYTHIC_DESKTOP")
+                            setenv("MYTHIC_EXE", "taskmgr.exe", 1)
+                            unsetenv("MYTHIC_ARGS")
+                            selectedTab = .screen
+                            runWineFullSequence()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.indigo)
                         .font(.caption.weight(.medium))
                     }
                     .padding(12)
