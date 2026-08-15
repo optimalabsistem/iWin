@@ -78,12 +78,8 @@ static void my_release_win_data(struct macdrv_win_data *data) {
 }
 
 static int mythic_desktop_mode(void) {
-    static int desk = -1;
-    if (desk < 0) {
-        const char *d = getenv("MYTHIC_DESKTOP");
-        desk = d && *d == '1';
-    }
-    return desk;
+    const char *d = getenv("MYTHIC_DESKTOP");
+    return (d && *d == '1');
 }
 
 // Winios.m compositor: per-window CAMetalLayer inside the window's
@@ -109,13 +105,12 @@ static macdrv_metal_view my_view_create_metal_view(macdrv_view v, macdrv_metal_d
     (void)d;
     if (mythic_desktop_mode()) {
         CAMetalLayer *layer = winios_metal_layer_for_hwnd((void *)v);
-        if (!layer) {
-            NSLog(@"[mythic-display] desktop metal layer creation failed for hwnd=%p", (void *)v);
-            return NULL;
+        if (layer) {
+            fprintf(stderr, "[mythic-display] desktop metal view for hwnd=%p layer=%p\n", (void *)v, layer);
+            fflush(stderr);
+            return (macdrv_metal_view)CFBridgingRetain(layer);
         }
-        fprintf(stderr, "[mythic-display] desktop metal view for hwnd=%p layer=%p\n", (void *)v, layer);
-        fflush(stderr);
-        return (macdrv_metal_view)CFBridgingRetain(layer);
+        NSLog(@"[mythic-display] desktop metal layer not found for hwnd=%p, falling back to main layer", (void *)v);
     }
     pthread_mutex_lock(&g_lock);
     CAMetalLayer *layer = g_layer;
