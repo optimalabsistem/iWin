@@ -113,20 +113,23 @@ if [ -n "$FAILED_FILES" ]; then
 fi
 
 echo ""
-echo "=== Archiving libdxmt_unix.a ==="
-xcrun -sdk iphoneos ar rcs "$OUT_LIB" "$OBJ_DIR"/*.o
-echo "Built: $OUT_LIB ($(wc -c < "$OUT_LIB" | tr -d ' ') bytes)"
-
+echo "=== Extracting LLVM static objects and converting to iOS platform ==="
+LLVM_OBJ_DIR="$BUILD_DIR/llvm_obj"
+mkdir -p "$LLVM_OBJ_DIR"
 LLVM_CONFIG="$(brew --prefix llvm@15 2>/dev/null || brew --prefix llvm 2>/dev/null)/bin/llvm-config"
-LLVM_LIBS=""
 if [ -x "$LLVM_CONFIG" ]; then
-    LLVM_LIBS=$($LLVM_CONFIG --libfiles core support passes bitreader ipo instcombine scalaropts transformutils binaryformat target analysis remarks 2>/dev/null || true)
+    for lib in $($LLVM_CONFIG --libfiles core support passes bitreader ipo instcombine scalaropts transformutils binaryformat target analysis remarks 2>/dev/null || true); do
+        if [ -f "$lib" ]; then
+            (cd "$LLVM_OBJ_DIR" && ar -x "$lib")
+        fi
+    done
+    for o in "$LLVM_OBJ_DIR"/*.o; do
+        [ -f "$o" ] || continue
+        xcrun vtool -set-build-version ios 17.0 17.0 -replace -output "$o" "$o" 2>/dev/null || true
+    done
 fi
 
-if [ -n "$LLVM_LIBS" ]; then
-    echo "Merging LLVM static libraries into libdxmt_combined.a..."
-    libtool -static -o "$REPO_ROOT/app/Mythic/libdxmt_combined.a" "$OUT_LIB" $LLVM_LIBS
-else
-    cp "$OUT_LIB" "$REPO_ROOT/app/Mythic/libdxmt_combined.a"
-fi
-echo "Ready: $REPO_ROOT/app/Mythic/libdxmt_combined.a"
+echo "=== Archiving libdxmt_combined.a ==="
+xcrun -sdk iphoneos ar rcs "$OUT_LIB" "$OBJ_DIR"/*.o "$LLVM_OBJ_DIR"/*.o
+cp "$OUT_LIB" "$REPO_ROOT/app/Mythic/libdxmt_combined.a"
+echo "Ready: $REPO_ROOT/app/Mythic/libdxmt_combined.a ($(wc -c < "$REPO_ROOT/app/Mythic/libdxmt_combined.a" | tr -d ' ') bytes)"
