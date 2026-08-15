@@ -16,11 +16,11 @@ workflows:
       - name: Install Toolchain Dependencies
         script: |
           set -e
-          brew install ninja llvm gnutls freetype mingw-w64
+          brew install ninja llvm@15 llvm gnutls freetype mingw-w64
       - name: Setup Submodules and Build FEX for iOS
         script: |
           set -e
-          export PATH="$(brew --prefix llvm)/bin:$PATH"
+          export PATH="$(brew --prefix llvm)/bin:$(brew --prefix llvm@15 2>/dev/null || true)/bin:$PATH"
           git submodule update --init FEX
           git -C FEX submodule update --init External/fmt External/range-v3 External/unordered_dense External/xxhash External/SoftFloat-3e External/cephes External/jemalloc_glibc
           
