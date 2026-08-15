@@ -6,6 +6,8 @@ workflows:
     environment:
       xcode: latest
       cocoapods: default
+      vars:
+        CM_RECURSIVE_SUBMODULE_INIT: false
     scripts:
       - name: Print macOS & Xcode Info
         script: |
