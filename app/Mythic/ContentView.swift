@@ -881,6 +881,20 @@ struct ContentView: View {
     /// .compact = iPhone landscape: game surface expands, arrow keys appear.
     @Environment(\.verticalSizeClass) private var vSizeClass
 
+    enum MainTab: String, CaseIterable, Identifiable {
+        case screen = "🖥️ Screen"
+        case launcher = "🚀 Launcher"
+        case settings = "⚙️ Settings"
+        case logs = "📜 Console"
+
+        var id: String { rawValue }
+    }
+
+    @State private var selectedTab: MainTab = .screen
+    @State private var desktopResolution: String = "1280x720"
+    @State private var poolSizeSetting: Int = 896
+    @State private var logSearchText: String = ""
+
     enum JITStatus {
         case unknown
         case testing
@@ -890,13 +904,6 @@ struct ContentView: View {
     }
 
     var body: some View {
-        /* ml658: was NavigationView, which is deprecated and — the reason this
-         * matters — defaults to a SPLIT VIEW on iPad. TARGETED_DEVICE_FAMILY is
-         * "1,2", so iPad is a shipping target, and the whole UI was being forced
-         * into a sidebar/detail arrangement it was never laid out for.
-         * NavigationStack is single-column on every device. Safe here: there are
-         * no NavigationLinks anywhere in the app, so nothing depended on the
-         * two-column selection behaviour. */
         NavigationStack {
             Group {
                 if vSizeClass == .compact {
@@ -905,11 +912,7 @@ struct ContentView: View {
                     portraitBody
                 }
             }
-            // Rotation destroys/recreates the UIViewRepresentable across
-            // this if/else (two SwiftUI identities) — HARMLESS since
-            // 2026-07-05: MetalHostView is a process-lifetime singleton;
-            // a fresh placeholder only re-parents the same CAMetalLayer.
-            .navigationTitle("Mythic")
+            .navigationTitle("iWin Emulator")
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarHidden(vSizeClass == .compact)
             .onAppear {
@@ -923,71 +926,427 @@ struct ContentView: View {
         }
     }
 
-    /// Portrait: classic tooling layout — header, badges, 240pt game strip,
-    /// key row, action buttons, log console.
+    /// Portrait: Modern iPadOS 18 multi-tab dashboard layout
     private var portraitBody: some View {
         VStack(spacing: 0) {
-            // Readouts sit ABOVE the game strip, closest to the surface they
-            // describe: entitlement indicators, then the present/FPS readout,
-            // then the surface itself. (Only the KEY row stays below — it is
-            // input, not instrumentation.)
-            //
-            // NOTE: the surface is a raw window-level view positioned over the
-            // placeholder (MetalHostView.shared), so SwiftUI content laid "on
-            // top" of the strip is covered — these rows must be siblings above
-            // it, never overlays on it.
-            if let ents = entitlements {
-                entitlementBadges(ents)
+            // Header: Status Badges + Segmented Tab Selector
+            VStack(spacing: 6) {
+                if let ents = entitlements {
+                    entitlementBadges(ents)
+                }
+                Picker("Section", selection: $selectedTab) {
+                    ForEach(MainTab.allCases) { tab in
+                        Text(tab.rawValue).tag(tab)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 6)
             }
+            .background(Color(UIColor.secondarySystemBackground).opacity(0.95))
+
+            Divider()
+
+            // Main Active Tab Content
+            switch selectedTab {
+            case .screen:
+                screenTabView
+            case .launcher:
+                launcherTabView
+            case .settings:
+                settingsTabView
+            case .logs:
+                consoleTabView
+            }
+        }
+    }
+
+    private var screenTabView: some View {
+        VStack(spacing: 0) {
             HStack(spacing: 6) {
                 FPSOverlay()
                 Spacer()
+                Text("Desktop: \(desktopResolution)")
+                    .font(.caption2.monospaced())
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.secondary.opacity(0.15))
+                    .cornerRadius(4)
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
+
+            ZStack {
+                Color.black
+                MythicMetalView()
+            }
+            .frame(maxHeight: .infinity)
+            .cornerRadius(12)
             .padding(.horizontal, 8)
-            .padding(.bottom, 4)
-            MythicMetalView()
-                .frame(height: 240)
-                .background(Color.black)
-                .onAppear { TouchControlsHost.attach() }
-                .onReceive(NotificationCenter.default.publisher(
-                    for: UIDevice.orientationDidChangeNotification)) { _ in
-                    TouchControlsHost.attach()   // re-frame to the new bounds
-                }
-            HStack(spacing: 6) {
+            .padding(.bottom, 6)
+            .onAppear { TouchControlsHost.attach() }
+            .onReceive(NotificationCenter.default.publisher(
+                for: UIDevice.orientationDidChangeNotification)) { _ in
+                TouchControlsHost.attach()
+            }
+
+            // Input / Controller Toolbar
+            HStack(spacing: 8) {
                 if pointerPanel {
-                    // The cursor button has slid to the leftmost slot and become
-                    // the close control; matchedGeometryEffect animates the slide.
                     pointerToggleButton
                     pointerModeToggle
                     pointerSensSlider
                 } else {
-                    Group {
-                        keyButton("⏎", vk: 0x0D)   // VK_RETURN
-                        keyButton("␣", vk: 0x20)   // VK_SPACE
-                        keyButton("Esc", vk: 0x1B) // VK_ESCAPE
-                        Button { MetalBackedView.toggleKeyboard() } label: {
-                            Text("⌨").font(.system(size: 20))
-                                .frame(minWidth: 40, minHeight: 32)
-                                .background(Color.secondary.opacity(0.25))
-                                .cornerRadius(6)
-                        }
-                        JoystickKeyView()
+                    keyButton("⏎", vk: 0x0D)
+                    keyButton("␣", vk: 0x20)
+                    keyButton("Esc", vk: 0x1B)
+                    Button { MetalBackedView.toggleKeyboard() } label: {
+                        Image(systemName: "keyboard")
+                            .font(.system(size: 16))
+                            .frame(minWidth: 38, minHeight: 32)
+                            .background(Color.secondary.opacity(0.25))
+                            .cornerRadius(6)
                     }
-                    .transition(.opacity)
+                    JoystickKeyView()
                     pointerToggleButton
                     diagToggleButton
                     Spacer()
+                    Button {
+                        showingFileImporter = true
+                    } label: {
+                        Label("Run EXE", systemImage: "folder.badge.plus")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.purple)
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            // The expanded pad overflows this row; without a raised zIndex the
-            // later VStack siblings (action buttons, log) would draw over it.
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Color(UIColor.secondarySystemBackground))
             .zIndex(10)
+        }
+    }
+
+    private var launcherTabView: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                // Card 1: Run Custom .EXE from Files
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "folder.badge.plus")
+                            .font(.title2)
+                            .foregroundColor(.purple)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Run Custom .EXE")
+                                .font(.headline)
+                            Text("Select and execute any x86_64 or ARM64 Windows program from the Files app.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                    }
+                    Button {
+                        showingFileImporter = true
+                    } label: {
+                        HStack {
+                            Spacer()
+                            Image(systemName: "doc.badge.plus")
+                            Text("Browse & Launch .EXE")
+                                .fontWeight(.semibold)
+                            Spacer()
+                        }
+                        .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.purple)
+                }
+                .padding(16)
+                .background(RoundedRectangle(cornerRadius: 14).fill(Color(UIColor.secondarySystemBackground)))
+
+                // Card 2: Windows Virtual Desktop
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "display.2")
+                            .font(.title2)
+                            .foregroundColor(.blue)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Windows Virtual Desktop")
+                                .font(.headline)
+                            Text("Start Windows Explorer desktop with window management and RPCSS services.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                    }
+
+                    HStack {
+                        Text("Screen Resolution:")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Picker("", selection: $desktopResolution) {
+                            Text("1920x1080 (1080p)").tag("1920x1080")
+                            Text("1280x720 (720p)").tag("1280x720")
+                            Text("1024x768 (4:3)").tag("1024x768")
+                            Text("960x540 (Default)").tag("960x540")
+                        }
+                        .pickerStyle(.menu)
+                    }
+
+                    Button {
+                        launchConfiguredDesktop()
+                    } label: {
+                        HStack {
+                            Spacer()
+                            Image(systemName: "play.fill")
+                            Text("Launch Windows Desktop")
+                                .fontWeight(.semibold)
+                            Spacer()
+                        }
+                        .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.blue)
+                }
+                .padding(16)
+                .background(RoundedRectangle(cornerRadius: 14).fill(Color(UIColor.secondarySystemBackground)))
+
+                // Card 3 & 4 Grid: Steam & 3D Benchmark
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Image(systemName: "gamecontroller.fill")
+                                .font(.title3)
+                                .foregroundColor(.mint)
+                            Spacer()
+                        }
+                        Text("Steam Client")
+                            .font(.subheadline.weight(.semibold))
+                        Text("Launch Steam with RPCSS & network stack.")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .lineLimit(2)
+                        Button("Launch Steam") {
+                            launchSteamWithSettings()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.mint)
+                        .font(.caption.weight(.medium))
+                    }
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Image(systemName: "cube.transparent.fill")
+                                .font(.title3)
+                                .foregroundColor(.orange)
+                            Spacer()
+                        }
+                        Text("3D Metal Test")
+                            .font(.subheadline.weight(.semibold))
+                        Text("x86_64 JIT + DirectX 11 Metal 3D test.")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .lineLimit(2)
+                        Button("Run 3D Cube") {
+                            setenv("MYTHIC_EXE", "cube-x64.exe", 1)
+                            unsetenv("MYTHIC_ARGS")
+                            selectedTab = .screen
+                            runWineFullSequence()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.orange)
+                        .font(.caption.weight(.medium))
+                    }
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
+                }
+            }
+            .padding(16)
+        }
+    }
+
+    private var settingsTabView: some View {
+        Form {
+            Section(header: Text("Emulation & Memory Engine")) {
+                Picker("JIT Memory Pool", selection: $poolSizeSetting) {
+                    Text("384 MB (Light Games)").tag(384)
+                    Text("512 MB (Balanced)").tag(512)
+                    Text("640 MB (Expanded)").tag(640)
+                    Text("896 MB (Default / Steam)").tag(896)
+                    Text("1024 MB (Maximum)").tag(1024)
+                }
+                .onChange(of: poolSizeSetting) { newValue in
+                    savePoolSetting(newValue)
+                }
+
+                HStack {
+                    Text("JIT Kernel Status")
+                    Spacer()
+                    Text(debuggerAttached ? "Active (CS_DEBUGGED)" : "Not Active")
+                        .foregroundColor(debuggerAttached ? .green : .orange)
+                        .font(.caption.monospaced())
+                }
+            }
+
+            Section(header: Text("Mouse & Pointer Controls")) {
+                Toggle("Relative Trackpad Mode", isOn: $input.relative)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Pointer Sensitivity")
+                        Spacer()
+                        Text(String(format: "%.2fx", input.relative ? input.sensRel : input.sensAbs))
+                            .font(.caption.monospaced())
+                            .foregroundColor(.secondary)
+                    }
+                    Slider(value: input.relative ? $input.sensRel : $input.sensAbs, in: 0.2...5.0)
+                }
+                Toggle("Verbose Diagnostics Logging", isOn: $input.diagnostics)
+            }
+
+            Section(header: Text("System & Subsystems")) {
+                HStack {
+                    Text("App Version")
+                    Spacer()
+                    Text("iWin 1.0 (iPadOS 18 Edition)")
+                        .foregroundColor(.secondary)
+                }
+                HStack {
+                    Text("CPU Core")
+                    Spacer()
+                    Text("FEX-Emu ARM64 JIT")
+                        .foregroundColor(.secondary)
+                }
+                HStack {
+                    Text("Windows Subsystem")
+                    Spacer()
+                    Text("Wine 11.x ARM64EC")
+                        .foregroundColor(.secondary)
+                }
+                HStack {
+                    Text("Graphics Translator")
+                    Spacer()
+                    Text("DXMT DirectX 11 -> Metal 3.1")
+                        .foregroundColor(.secondary)
+                }
+                HStack {
+                    Text("Host Device")
+                    Spacer()
+                    Text(deviceInfo)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+    }
+
+    private var consoleTabView: some View {
+        VStack(spacing: 0) {
+            // Search & Filter Bar
+            HStack(spacing: 8) {
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
+                    TextField("Search console logs...", text: $logSearchText)
+                        .font(.caption)
+                    if !logSearchText.isEmpty {
+                        Button { logSearchText = "" } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                .padding(6)
+                .background(Color(UIColor.tertiarySystemBackground))
+                .cornerRadius(8)
+
+                Button {
+                    let allText = logStore.entries.map { "\($0.lastTimestamp) [\($0.level.rawValue)] \($0.lastRaw)" }.joined(separator: "\n")
+                    UIPasteboard.general.string = allText
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 14))
+                }
+                .buttonStyle(.bordered)
+
+                Button {
+                    logStore.clear()
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 14))
+                }
+                .buttonStyle(.bordered)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color(UIColor.secondarySystemBackground))
+
             Divider()
-            actionButtons
-            Divider()
-            logConsole
+
+            let entries = logStore.entries
+                .filter { entry in
+                    if logSearchText.isEmpty { return true }
+                    return entry.lastRaw.localizedCaseInsensitiveContains(logSearchText)
+                }
+                .sorted(by: { $0.lastTimestamp > $1.lastTimestamp })
+
+            List(entries) { entry in
+                HStack(alignment: .top, spacing: 6) {
+                    Text(timeString(entry.lastTimestamp))
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundColor(.secondary)
+                        .frame(width: 58, alignment: .leading)
+
+                    Text(entry.level.rawValue)
+                        .font(.system(.caption2, design: .monospaced).weight(.bold))
+                        .foregroundColor(colorForLevel(entry.level))
+                        .frame(width: 26, alignment: .leading)
+
+                    Text(entry.lastRaw)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundColor(.primary)
+                        .lineLimit(nil)
+                }
+                .listRowInsets(EdgeInsets(top: 3, leading: 8, bottom: 3, trailing: 8))
+            }
+            .listStyle(.plain)
+        }
+    }
+
+    private func launchConfiguredDesktop() {
+        let parts = desktopResolution.split(separator: "x")
+        let w = parts.count == 2 ? (Int(parts[0]) ?? 1280) : 1280
+        let h = parts.count == 2 ? (Int(parts[1]) ?? 720) : 720
+        setenv("MYTHIC_EXE", "explorer.exe", 1)
+        setenv("MYTHIC_ARGS", "/desktop=shell,\(w)x\(h) C:\\windows\\system32\\services.exe", 1)
+        setenv("MYTHIC_DESKTOP", "1", 1)
+        setenv("MYTHIC_SCREEN_W", String(w), 1)
+        setenv("MYTHIC_SCREEN_H", String(h), 1)
+        selectedTab = .screen
+        runWineFullSequence()
+    }
+
+    private func launchSteamWithSettings() {
+        guard prepareSteamLaunch() else { return }
+        let parts = desktopResolution.split(separator: "x")
+        let deskW = parts.count == 2 ? (Int(parts[0]) ?? 1024) : 1024
+        let deskH = parts.count == 2 ? (Int(parts[1]) ?? 768) : 768
+        setenv("MYTHIC_EXE", "explorer.exe", 1)
+        setenv("MYTHIC_ARGS", "/desktop=shell,\(deskW)x\(deskH) cmd /c C:\\steam-launch.bat", 1)
+        setenv("MYTHIC_DESKTOP", "1", 1)
+        setenv("MYTHIC_SCREEN_W", String(deskW), 1)
+        setenv("MYTHIC_SCREEN_H", String(deskH), 1)
+        selectedTab = .screen
+        runWineFullSequence()
+    }
+
+    private func savePoolSetting(_ mb: Int) {
+        if let d = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            let path = d.appendingPathComponent("mythic-pool.txt")
+            try? "\(mb)".write(to: path, atomically: true, encoding: .utf8)
+            logStore.log("Saved JIT pool override: \(mb)MB", level: .info)
         }
     }
 
