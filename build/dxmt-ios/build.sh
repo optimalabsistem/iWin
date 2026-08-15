@@ -127,11 +127,7 @@ if [ -x "$LLVM_CONFIG" ]; then
                 ;;
         esac
     done
-    for o in "$LLVM_OBJ_DIR"/*.o; do
-        [ -f "$o" ] || continue
-        xcrun vtool -set-build-version 2 17.0 17.0 -replace -output "$o.ios" "$o" 2>/dev/null && mv -f "$o.ios" "$o" || \
-        xcrun vtool -set-build-version ios 17.0 17.0 -replace -output "$o.ios" "$o" 2>/dev/null && mv -f "$o.ios" "$o" || true
-    done
+    python3 "$BUILD_DIR/patch_macho_ios.py" "$LLVM_OBJ_DIR"
 fi
 
 echo "=== Archiving libdxmt_combined.a ==="
