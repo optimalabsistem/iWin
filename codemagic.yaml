@@ -37,6 +37,8 @@ workflows:
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=17.0 \
             -DCMAKE_BUILD_TYPE=Release \
+            -DTUNE_CPU=none \
+            -DTUNE_ARCH=armv8.2-a \
             -DBUILD_TESTING=False \
             -DENABLE_LTO=False \
             -G Ninja
