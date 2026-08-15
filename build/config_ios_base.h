@@ -1,6 +1,13 @@
 #ifndef __WINE_CONFIG_H
 #define __WINE_CONFIG_H
 
+#define PACKAGE_NAME "Wine"
+#define PACKAGE_STRING "Wine 11.0"
+#define PACKAGE_VERSION "11.0"
+#define PACKAGE_BUGREPORT "https://bugs.winehq.org"
+#define PACKAGE_TARNAME "wine"
+#define PACKAGE_URL "https://www.winehq.org"
+
 #define HAVE_SYS_TYPES_H 1
 #define HAVE_SYS_STAT_H 1
 #define HAVE_STDLIB_H 1
