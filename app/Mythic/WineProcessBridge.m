@@ -556,9 +556,14 @@ static void *wine_process_thread(void *arg) {
         // Otherwise: detect "x64" in the exe name (cube-x64, fib-x64, etc.)
         // OR a Win32 full path (real game launches typically need ARM64EC).
         const char *force_ec = getenv("MYTHIC_USE_ARM64EC");
-        BOOL use_arm64ec = (force_ec && *force_ec == '1') ||
-                           (strstr(mythic_exe, "x64") != NULL) ||
-                           (strchr(mythic_exe, '\\') != NULL);
+        BOOL use_arm64ec = NO;
+        if (strstr(mythic_exe, "explorer") != NULL) {
+            use_arm64ec = NO; // Explorer desktop session uses aarch64-windows
+        } else if (force_ec && *force_ec == '1') {
+            use_arm64ec = YES;
+        } else if ((strstr(mythic_exe, "x64") != NULL) || (strchr(mythic_exe, '\\') != NULL)) {
+            use_arm64ec = YES;
+        }
         const char *bundle_subdir = use_arm64ec ? "arm64ec-windows" : "aarch64-windows";
         LOG("Target exe: %{public}s (bundle=%{public}s)", mythic_exe, bundle_subdir);
         dprintf(STDERR_FILENO, "[WineProc] Target exe: %s (bundle=%s)\n", mythic_exe, bundle_subdir);

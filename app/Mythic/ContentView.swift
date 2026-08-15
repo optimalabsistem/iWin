@@ -1163,11 +1163,11 @@ struct ContentView: View {
                             let w = parts.count == 2 ? (Int(parts[0]) ?? 1280) : 1280
                             let h = parts.count == 2 ? (Int(parts[1]) ?? 720) : 720
                             setenv("MYTHIC_EXE", "explorer.exe", 1)
-                            setenv("MYTHIC_ARGS", "/desktop=shell,\(w)x\(h) cube-x64.exe", 1)
+                            setenv("MYTHIC_ARGS", "/desktop=shell,\(w)x\(h) cube.exe", 1)
                             setenv("MYTHIC_DESKTOP", "1", 1)
                             setenv("MYTHIC_SCREEN_W", String(w), 1)
                             setenv("MYTHIC_SCREEN_H", String(h), 1)
-                            setenv("MYTHIC_USE_ARM64EC", "1", 1)
+                            unsetenv("MYTHIC_USE_ARM64EC")
                             selectedTab = .screen
                             runWineFullSequence()
                         }
