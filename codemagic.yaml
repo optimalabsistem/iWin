@@ -67,9 +67,11 @@ workflows:
           WIDL_BIN=$(command -v widl || command -v x86_64-w64-mingw32-widl || echo "$(brew --prefix mingw-w64 2>/dev/null)/bin/x86_64-w64-mingw32-widl")
           if [ -x "$WIDL_BIN" ]; then
             echo "Generating headers from IDL files using WIDL..."
-            for idl in wine/include/objidlbase.idl wine/include/objidl.idl wine/include/unknwn.idl wine/include/oaidl.idl wine/include/propidl.idl wine/include/wtypes.idl wine/include/wtypesbase.idl wine/include/d2d1*.idl wine/include/dwrite*.idl; do
+            for idl in wine/include/*.idl; do
               hdr="wine/include/$(basename "$idl" .idl).h"
-              [ -f "$hdr" ] || $WIDL_BIN -h -Iwine/include "$idl" -o "$hdr" || true
+              if [ ! -f "$hdr" ]; then
+                $WIDL_BIN -h -Iwine/include "$idl" -o "$hdr" 2>/dev/null || true
+              fi
             done
           fi
 
