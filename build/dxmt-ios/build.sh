@@ -17,7 +17,7 @@ OUT_LIB="$BUILD_DIR/libdxmt_unix.a"
 
 mkdir -p "$OBJ_DIR"
 
-COMMON_FLAGS="-arch arm64 -isysroot $SDK -miphoneos-version-min=18.0 -fblocks -O2"
+COMMON_FLAGS="-arch arm64 -isysroot $SDK -miphoneos-version-min=17.0 -fblocks -O2"
 INCLUDES="-I$DXMT_ROOT/include -I$DXMT_ROOT/libs -I$DXMT_ROOT/libs/DXBCParser -I$DXMT_SRC/winemetal -I$DXMT_SRC/airconv"
 INCLUDES_DIRECTX="-I$DXMT_ROOT/include/native/directx -I$DXMT_ROOT/include/native/windows -I$REPO_ROOT/wine/include"
 INCLUDES_SHADERS="-I$BUILD_DIR/shader-headers"
@@ -129,7 +129,8 @@ if [ -x "$LLVM_CONFIG" ]; then
     done
     for o in "$LLVM_OBJ_DIR"/*.o; do
         [ -f "$o" ] || continue
-        xcrun vtool -set-build-version ios 17.0 17.0 -replace -output "$o" "$o" 2>/dev/null || true
+        xcrun vtool -set-build-version 2 17.0 17.0 -replace -output "$o.ios" "$o" 2>/dev/null && mv -f "$o.ios" "$o" || \
+        xcrun vtool -set-build-version ios 17.0 17.0 -replace -output "$o.ios" "$o" 2>/dev/null && mv -f "$o.ios" "$o" || true
     done
 fi
 
