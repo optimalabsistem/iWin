@@ -49,6 +49,9 @@ struct EntitlementStatus {
  * ENTITLEMENT is macOS-only and never granted on iOS, so the old badge
  * built on it was permanently ✗ no matter what StikDebug did. */
 func isDebuggerAttached() -> Bool {
+    if jit_check_debugged() {
+        return true
+    }
     var info = kinfo_proc()
     var size = MemoryLayout<kinfo_proc>.stride
     var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()]

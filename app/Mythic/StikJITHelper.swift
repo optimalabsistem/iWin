@@ -80,7 +80,15 @@ enum StikJITHelper {
     /// Allocate a JIT memory pool via BRK #0xf00d WITHOUT detaching the debugger.
     /// The debugger stays attached so Wine can use BRK to prepare PE code pages.
     static func allocatePool(poolSize: Int = 128 * 1024 * 1024) -> (rx: UnsafeMutableRawPointer, rw: UnsafeMutableRawPointer, size: Int)? {
-        LogStore.shared.log("Allocating \(poolSize / 1024 / 1024)MB JIT pool via debugger...")
+        LogStore.shared.log("Allocating \(poolSize / 1024 / 1024)MB JIT pool...")
+
+        // Direct native dual-mapped allocation (Works on SideStore, AltStore, TrollStore, etc.)
+        if let region = jit_region_create(poolSize) {
+            if let rx = region.pointee.rx_ptr, let rw = region.pointee.rw_ptr {
+                LogStore.shared.log("Native dual-mapped JIT pool created: RX=\(rx), RW=\(rw), size=\(region.pointee.size / 1024 / 1024)MB", level: .success)
+                return (rx: rx, rw: rw, size: region.pointee.size)
+            }
+        }
 
         // iOS-Mythic: FEX's dispatcher emit has a position-dependent encoding
         // bug — only works when the JIT pool lands at a high enough address
