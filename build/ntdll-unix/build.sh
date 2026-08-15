@@ -40,7 +40,8 @@ compile_one() {
         echo "OK"
         SUCCEEDED=$((SUCCEEDED + 1))
     else
-        echo "FAILED"
+        echo "FAILED:"
+        cat "$OBJ_DIR/$name.err" 2>/dev/null || true
         FAILED=$((FAILED + 1))
         FAILED_FILES="$FAILED_FILES $name"
     fi
@@ -55,6 +56,8 @@ compile_one() {
 CRYPTO_DIR="$REPO_ROOT/build/crypto-unix"
 GNUTLS_PREFIX="$REPO_ROOT/toolchains/gnutls-ios"
 [ -d "$GNUTLS_PREFIX/include" ] || GNUTLS_PREFIX="$(brew --prefix gnutls 2>/dev/null || echo /opt/homebrew/opt/gnutls)"
+FT_INC="$(brew --prefix freetype 2>/dev/null || echo /opt/homebrew/opt/freetype)/include/freetype2"
+
 compile_unixlib() {
     local src=$1 name=$2 prefix=$3
     shift 3
@@ -76,7 +79,8 @@ compile_unixlib() {
         echo "OK"
         SUCCEEDED=$((SUCCEEDED + 1))
     else
-        echo "FAILED"
+        echo "FAILED:"
+        cat "$OBJ_DIR/$name.err" 2>/dev/null || true
         FAILED=$((FAILED + 1))
         FAILED_FILES="$FAILED_FILES $name"
     fi
@@ -109,7 +113,7 @@ compile_unixlib "$WINE_SRC/dlls/secur32/schannel_gnutls.c" "secur32_unixlib" "se
 # build tree, so that include dir is named explicitly here.
 compile_unixlib "$BUILD_DIR/dwrite_freetype_ios.c" "dwrite_unixlib" "dwrite" \
     -I"$WINE_SRC/dlls/dwrite" -I"$REPO_ROOT/research/freetype/include" \
-    -I"$REPO_ROOT/wine/build-arm64ec/include"
+    -I"$REPO_ROOT/wine/build-arm64ec/include" -I"$FT_INC"
 compile_unixlib "$CRYPTO_DIR/crypt32_unixlib_ios.c" "crypt32_unixlib" "crypt32" \
     -I"$WINE_SRC/dlls/crypt32" -I"$GNUTLS_PREFIX/include" \
     -include "$CRYPTO_DIR/ios_gnutls_shim.h"

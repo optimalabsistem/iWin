@@ -16,7 +16,7 @@ workflows:
       - name: Install Toolchain Dependencies
         script: |
           set -e
-          brew install ninja llvm gnutls
+          brew install ninja llvm gnutls freetype
       - name: Setup Submodules and Build FEX for iOS
         script: |
           set -e
