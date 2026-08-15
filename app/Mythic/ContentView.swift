@@ -36,7 +36,7 @@ final class MetalHostView: UIView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         isUserInteractionEnabled = false   // touches fall through to SwiftUI
-        backgroundColor = .black
+        backgroundColor = .clear
         contentScaleFactor = UIScreen.main.scale
         metalLayer.device = MTLCreateSystemDefaultDevice()
         metalLayer.pixelFormat = .bgra8Unorm
@@ -151,27 +151,32 @@ final class MetalBackedView: UIView {
             v = s.superview
         }
         let host = MetalHostView.shared
-        if host.superview !== w {
+        if host.superview !== self {
             host.removeFromSuperview()
-            w.addSubview(host)
+            self.addSubview(host)
         }
-        host.frame = convert(gameRect(), to: w)
-        // S2 desktop mode: the winios compositor renders the wine virtual
-        // desktop aspect-fit inside THIS placeholder's area, exactly like
-        // the games' Metal layer — never over the whole phone screen.
+        host.frame = bounds
+        host.isHidden = false
         let full = convert(bounds, to: w)
         winios_set_compositor_frame(full.minX, full.minY, full.width, full.height)
         if !Self.layerRegistered {
             Self.layerRegistered = true
             mythic_display_set_layer(host.metalLayer)
-            LogStore.shared.log("MetalLayer registered with DXMT shim (window-hosted singleton)", level: .success)
+            LogStore.shared.log("MetalLayer registered with DXMT shim", level: .success)
+        }
+    }
+
+    override func willMove(toWindow newWindow: UIWindow?) {
+        super.willMove(toWindow: newWindow)
+        if newWindow == nil {
+            MetalHostView.shared.removeFromSuperview()
         }
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        MetalHostView.shared.frame = bounds
         if let w = window {
-            MetalHostView.shared.frame = convert(gameRect(), to: w)
             let full = convert(bounds, to: w)
             winios_set_compositor_frame(full.minX, full.minY, full.width, full.height)
         }
