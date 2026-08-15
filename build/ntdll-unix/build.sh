@@ -112,7 +112,7 @@ compile_unixlib "$WINE_SRC/dlls/secur32/schannel_gnutls.c" "secur32_unixlib" "se
 # dwrite.h/dwrite_3.h are widl-generated and only exist in the arm64ec
 # build tree, so that include dir is named explicitly here.
 compile_unixlib "$BUILD_DIR/dwrite_freetype_ios.c" "dwrite_unixlib" "dwrite" \
-    -I"$WINE_SRC/dlls/dwrite" -I"$REPO_ROOT/research/freetype/include" \
+    -I"$WINE_SRC/dlls/dwrite" -I"$WINE_SRC/include" -I"$REPO_ROOT/research/freetype/include" \
     -I"$REPO_ROOT/wine/build-arm64ec/include" -I"$FT_INC"
 compile_unixlib "$CRYPTO_DIR/crypt32_unixlib_ios.c" "crypt32_unixlib" "crypt32" \
     -I"$WINE_SRC/dlls/crypt32" -I"$GNUTLS_PREFIX/include" \

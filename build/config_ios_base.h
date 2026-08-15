@@ -29,6 +29,8 @@
 #define HAVE_SYS_TIME_H 1
 #define HAVE_SYS_PARAM_H 1
 #define HAVE_SYS_IOCTL_H 1
+#define HAVE_SYS_CONF_H 1
+#define HAVE_SYS_DISK_H 1
 #define HAVE_SYS_MOUNT_H 1
 #define HAVE_SYS_STATVFS_H 1
 #define HAVE_SYS_SYSCTL_H 1
