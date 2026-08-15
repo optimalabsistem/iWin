@@ -25,4 +25,7 @@ static inline __attribute__((noreturn)) void wine_ios_exit(int status) {
 }
 
 #define exit(x) wine_ios_exit(x)
+#define _exit(x) wine_ios_exit(x)
+#define _Exit(x) wine_ios_exit(x)
+#define abort() wine_ios_exit(134)
 #endif
