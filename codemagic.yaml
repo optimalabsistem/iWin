@@ -37,6 +37,10 @@ workflows:
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=17.0 \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_FLAGS="-DFEX_IOS_HOST=1" \
+            -DCMAKE_CXX_FLAGS="-DFEX_IOS_HOST=1" \
+            -DFEX_IOS_HOST=ON \
+            -DFEX_IOS_HOST_BUILD=ON \
             -DTUNE_CPU=none \
             -DTUNE_ARCH=armv8.2-a \
             -DBUILD_TESTING=False \
