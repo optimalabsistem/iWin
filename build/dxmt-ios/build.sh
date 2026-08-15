@@ -18,7 +18,7 @@ OUT_LIB="$BUILD_DIR/libdxmt_unix.a"
 mkdir -p "$OBJ_DIR"
 
 COMMON_FLAGS="-arch arm64 -isysroot $SDK -miphoneos-version-min=18.0 -fblocks -O2"
-INCLUDES="-I$DXMT_ROOT/include -I$DXMT_ROOT/libs -I$DXMT_SRC/winemetal -I$DXMT_SRC/airconv"
+INCLUDES="-I$DXMT_ROOT/include -I$DXMT_ROOT/libs -I$DXMT_ROOT/libs/DXBCParser -I$DXMT_SRC/winemetal -I$DXMT_SRC/airconv"
 INCLUDES_DIRECTX="-I$DXMT_ROOT/include/native/directx -I$DXMT_ROOT/include/native/windows"
 INCLUDES_SHADERS="-I$BUILD_DIR/shader-headers"
 LLVM_INCLUDES="-I$LLVM_BUILD/include -I$LLVM_SRC/include"
@@ -33,6 +33,19 @@ SUCCEEDED=0
 FAILED=0
 FAILED_FILES=""
 
+echo "=== Generating Metal shader headers ==="
+mkdir -p "$BUILD_DIR/shader-headers"
+for shader in msad samplepos tessellation; do
+    metal_src="$DXMT_SRC/airconv/shaders/air_${shader}.metal"
+    if [ -f "$metal_src" ]; then
+        if xcrun -sdk iphoneos metal -c -std=metal3.1 "$metal_src" -o "$OBJ_DIR/air_${shader}.air" 2>/dev/null; then
+            xxd -i "$OBJ_DIR/air_${shader}.air" | sed "s/unsigned char.*=/const unsigned char air_${shader}[] =/" > "$BUILD_DIR/shader-headers/air_${shader}.h"
+        else
+            echo "const unsigned char air_${shader}[] = {0};" > "$BUILD_DIR/shader-headers/air_${shader}.h"
+        fi
+    fi
+done
+
 compile_objc() {
     local src=$1 name=$2
     printf "  %-40s " "$name"
@@ -40,7 +53,9 @@ compile_objc() {
         -c "$src" -o "$OBJ_DIR/$name.o" 2>"$OBJ_DIR/$name.err"; then
         echo "OK"; SUCCEEDED=$((SUCCEEDED+1))
     else
-        echo "FAILED"; FAILED=$((FAILED+1)); FAILED_FILES="$FAILED_FILES $name"
+        echo "FAILED:"
+        cat "$OBJ_DIR/$name.err" 2>/dev/null || true
+        FAILED=$((FAILED+1)); FAILED_FILES="$FAILED_FILES $name"
     fi
 }
 
@@ -51,7 +66,9 @@ compile_cxx() {
         -c "$src" -o "$OBJ_DIR/$name.o" 2>"$OBJ_DIR/$name.err"; then
         echo "OK"; SUCCEEDED=$((SUCCEEDED+1))
     else
-        echo "FAILED"; FAILED=$((FAILED+1)); FAILED_FILES="$FAILED_FILES $name"
+        echo "FAILED:"
+        cat "$OBJ_DIR/$name.err" 2>/dev/null || true
+        FAILED=$((FAILED+1)); FAILED_FILES="$FAILED_FILES $name"
     fi
 }
 
@@ -81,7 +98,9 @@ for cpp in BlobContainer.cpp DXBCUtils.cpp ShaderBinary.cpp; do
             -c "$DXMT_ROOT/libs/DXBCParser/$cpp" -o "$OBJ_DIR/$name.o" 2>"$OBJ_DIR/$name.err"; then
         echo "OK"; SUCCEEDED=$((SUCCEEDED+1))
     else
-        echo "FAILED"; FAILED=$((FAILED+1)); FAILED_FILES="$FAILED_FILES $name"
+        echo "FAILED:"
+        cat "$OBJ_DIR/$name.err" 2>/dev/null || true
+        FAILED=$((FAILED+1)); FAILED_FILES="$FAILED_FILES $name"
     fi
 done
 
