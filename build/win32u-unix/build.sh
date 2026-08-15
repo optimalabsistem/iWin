@@ -25,6 +25,8 @@ FAILED_FILES=""
 
 FREETYPE_DIR="$REPO_ROOT/build/freetype-ios"
 
+FT_INC="$(brew --prefix freetype 2>/dev/null || echo /opt/homebrew/opt/freetype)/include/freetype2"
+
 compile_one() {
     local src=$1
     local name=$2
@@ -58,7 +60,8 @@ compile_one() {
         echo "OK"
         SUCCEEDED=$((SUCCEEDED + 1))
     else
-        echo "FAILED"
+        echo "FAILED:"
+        cat "$OBJ_DIR/$name.err" 2>/dev/null || true
         FAILED=$((FAILED + 1))
         FAILED_FILES="$FAILED_FILES $name"
     fi
@@ -111,7 +114,9 @@ for src in $WINE_SRC/dlls/win32u/*.c $WINE_SRC/dlls/win32u/dibdrv/*.c; do
             # for every other TU.
             compile_one "$BUILD_DIR/freetype_ios.c" "freetype" \
                 -I"$FREETYPE_DIR/build/include" \
-                -I"$REPO_ROOT/research/freetype/include"
+                -I"$REPO_ROOT/research/freetype/include" \
+                -I"$WINE_SRC/include" \
+                -I"$FT_INC"
             continue
             ;;
     esac
