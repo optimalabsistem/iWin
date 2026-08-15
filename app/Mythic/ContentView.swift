@@ -894,6 +894,9 @@ struct ContentView: View {
     @State private var desktopResolution: String = "1280x720"
     @State private var poolSizeSetting: Int = 896
     @State private var logSearchText: String = ""
+    @AppStorage("remote_log_server") private var remoteLogServer: String = "http://3.1.51.240:8080/log"
+    @State private var serverTestStatus: String = ""
+    @State private var isTestingServer: Bool = false
 
     enum JITStatus {
         case unknown
@@ -1204,6 +1207,47 @@ struct ContentView: View {
                     Slider(value: input.relative ? $input.sensRel : $input.sensAbs, in: 0.2...5.0)
                 }
                 Toggle("Verbose Diagnostics Logging", isOn: $input.diagnostics)
+            }
+
+            Section(header: Text("Live Remote Telemetry & Crash Reporting")) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Server IP / URL")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    TextField("http://3.1.51.240:8080/log", text: $remoteLogServer)
+                        .font(.caption.monospaced())
+                        .textFieldStyle(.roundedBorder)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                }
+
+                Button {
+                    isTestingServer = true
+                    serverTestStatus = "Testing connection..."
+                    RemoteLogger.shared.serverURLString = remoteLogServer
+                    RemoteLogger.shared.testConnection { success, message in
+                        isTestingServer = false
+                        serverTestStatus = success ? "✅ \(message)" : "❌ \(message)"
+                        if success {
+                            RemoteLogger.shared.send("Connected from iPad!", level: "TEST")
+                        }
+                    }
+                } label: {
+                    HStack {
+                        Image(systemName: "antenna.radiowaves.left.and.right")
+                        Text("Test Connection to Server")
+                        Spacer()
+                        if isTestingServer {
+                            ProgressView()
+                        }
+                    }
+                }
+
+                if !serverTestStatus.isEmpty {
+                    Text(serverTestStatus)
+                        .font(.caption2.monospaced())
+                        .foregroundColor(serverTestStatus.contains("✅") ? .green : .red)
+                }
             }
 
             Section(header: Text("System & Subsystems")) {

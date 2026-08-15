@@ -125,6 +125,8 @@ final class LogStore: ObservableObject {
         let (sig, level) = LogPattern.canonicalize(raw)
         if sig.isEmpty { return }
 
+        RemoteLogger.shared.send(raw, level: level.rawValue)
+
         let now = Date()
         stateLock.lock()
         if let idx = sigToIndex[sig] {
