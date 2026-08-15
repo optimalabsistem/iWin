@@ -112,20 +112,26 @@ if [ -n "$FAILED_FILES" ]; then
     exit 1
 fi
 
+echo "=== Compiling curses stub for iOS ==="
+cat << 'EOF' > "$OBJ_DIR/curses_stub.c"
+int setupterm(char *term, int fildes, int *errret) { if (errret) *errret = -1; return -1; }
+int set_curterm(void *nterm) { return 0; }
+int del_curterm(void *oterm) { return 0; }
+int tigetnum(char *capname) { return -1; }
+EOF
+xcrun -sdk iphoneos clang $COMMON_FLAGS -c "$OBJ_DIR/curses_stub.c" -o "$OBJ_DIR/curses_stub.o"
+
 echo ""
 echo "=== Extracting LLVM static objects and converting to iOS platform ==="
 LLVM_OBJ_DIR="$BUILD_DIR/llvm_obj"
 mkdir -p "$LLVM_OBJ_DIR"
 LLVM_CONFIG="$(brew --prefix llvm@15 2>/dev/null || brew --prefix llvm 2>/dev/null)/bin/llvm-config"
 if [ -x "$LLVM_CONFIG" ]; then
-    for lib in $($LLVM_CONFIG --link-static --libfiles core support passes bitreader ipo instcombine scalaropts transformutils binaryformat target analysis remarks 2>/dev/null || true); do
-        case "$lib" in
-            *.a)
-                if [ -f "$lib" ]; then
-                    (cd "$LLVM_OBJ_DIR" && ar -x "$lib")
-                fi
-                ;;
-        esac
+    LLVM_LIB_DIR="$($LLVM_CONFIG --libdir)"
+    for lib in "$LLVM_LIB_DIR"/libLLVM*.a; do
+        if [ -f "$lib" ]; then
+            (cd "$LLVM_OBJ_DIR" && ar -x "$lib")
+        fi
     done
     python3 "$BUILD_DIR/patch_macho_ios.py" "$LLVM_OBJ_DIR"
 fi
