@@ -1159,9 +1159,15 @@ struct ContentView: View {
                             .foregroundColor(.secondary)
                             .lineLimit(2)
                         Button("Run 3D Cube") {
-                            unsetenv("MYTHIC_DESKTOP")
-                            setenv("MYTHIC_EXE", "cube-x64.exe", 1)
-                            unsetenv("MYTHIC_ARGS")
+                            let parts = desktopResolution.split(separator: "x")
+                            let w = parts.count == 2 ? (Int(parts[0]) ?? 1280) : 1280
+                            let h = parts.count == 2 ? (Int(parts[1]) ?? 720) : 720
+                            setenv("MYTHIC_EXE", "explorer.exe", 1)
+                            setenv("MYTHIC_ARGS", "/desktop=shell,\(w)x\(h) cube-x64.exe", 1)
+                            setenv("MYTHIC_DESKTOP", "1", 1)
+                            setenv("MYTHIC_SCREEN_W", String(w), 1)
+                            setenv("MYTHIC_SCREEN_H", String(h), 1)
+                            setenv("MYTHIC_USE_ARM64EC", "1", 1)
                             selectedTab = .screen
                             runWineFullSequence()
                         }
@@ -1186,9 +1192,14 @@ struct ContentView: View {
                             .foregroundColor(.secondary)
                             .lineLimit(2)
                         Button("Play Winemine") {
-                            unsetenv("MYTHIC_DESKTOP")
-                            setenv("MYTHIC_EXE", "winemine.exe", 1)
-                            unsetenv("MYTHIC_ARGS")
+                            let parts = desktopResolution.split(separator: "x")
+                            let w = parts.count == 2 ? (Int(parts[0]) ?? 1280) : 1280
+                            let h = parts.count == 2 ? (Int(parts[1]) ?? 720) : 720
+                            setenv("MYTHIC_EXE", "explorer.exe", 1)
+                            setenv("MYTHIC_ARGS", "/desktop=shell,\(w)x\(h) winemine.exe", 1)
+                            setenv("MYTHIC_DESKTOP", "1", 1)
+                            setenv("MYTHIC_SCREEN_W", String(w), 1)
+                            setenv("MYTHIC_SCREEN_H", String(h), 1)
                             selectedTab = .screen
                             runWineFullSequence()
                         }
@@ -1213,9 +1224,14 @@ struct ContentView: View {
                             .foregroundColor(.secondary)
                             .lineLimit(2)
                         Button("Open Taskmgr") {
-                            unsetenv("MYTHIC_DESKTOP")
-                            setenv("MYTHIC_EXE", "taskmgr.exe", 1)
-                            unsetenv("MYTHIC_ARGS")
+                            let parts = desktopResolution.split(separator: "x")
+                            let w = parts.count == 2 ? (Int(parts[0]) ?? 1280) : 1280
+                            let h = parts.count == 2 ? (Int(parts[1]) ?? 720) : 720
+                            setenv("MYTHIC_EXE", "explorer.exe", 1)
+                            setenv("MYTHIC_ARGS", "/desktop=shell,\(w)x\(h) taskmgr.exe", 1)
+                            setenv("MYTHIC_DESKTOP", "1", 1)
+                            setenv("MYTHIC_SCREEN_W", String(w), 1)
+                            setenv("MYTHIC_SCREEN_H", String(h), 1)
                             selectedTab = .screen
                             runWineFullSequence()
                         }
@@ -2055,8 +2071,15 @@ struct ContentView: View {
                 try fm.copyItem(at: url, to: destUrl)
                 let winPath = "C:\\Games\\\(url.lastPathComponent)"
                 logStore.log("Imported custom executable: \(winPath)", level: .success)
-                setenv("MYTHIC_EXE", winPath, 1)
+                let parts = desktopResolution.split(separator: "x")
+                let w = parts.count == 2 ? (Int(parts[0]) ?? 1280) : 1280
+                let h = parts.count == 2 ? (Int(parts[1]) ?? 720) : 720
+                setenv("MYTHIC_EXE", "explorer.exe", 1)
+                setenv("MYTHIC_ARGS", "/desktop=shell,\(w)x\(h) \(winPath)", 1)
                 setenv("MYTHIC_DESKTOP", "1", 1)
+                setenv("MYTHIC_SCREEN_W", String(w), 1)
+                setenv("MYTHIC_SCREEN_H", String(h), 1)
+                selectedTab = .screen
                 runWineFullSequence()
             } catch {
                 logStore.log("Failed to copy executable: \(error.localizedDescription)", level: .error)

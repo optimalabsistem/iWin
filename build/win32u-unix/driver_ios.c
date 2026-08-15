@@ -355,13 +355,8 @@ done:
 
 static int winios_desktop_mode(void)
 {
-    static int mode = -1;
-    if (mode < 0)
-    {
-        const char *env = getenv( "MYTHIC_DESKTOP" );
-        mode = (env && *env == '1');
-    }
-    return mode;
+    const char *env = getenv( "MYTHIC_DESKTOP" );
+    return (env && *env == '1');
 }
 
 /* ml505 probe. This hook was a pure stub: wine hands the driver the
