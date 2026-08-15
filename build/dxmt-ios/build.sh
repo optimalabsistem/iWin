@@ -116,5 +116,17 @@ echo ""
 echo "=== Archiving libdxmt_unix.a ==="
 xcrun -sdk iphoneos ar rcs "$OUT_LIB" "$OBJ_DIR"/*.o
 echo "Built: $OUT_LIB ($(wc -c < "$OUT_LIB" | tr -d ' ') bytes)"
-cp "$OUT_LIB" "$REPO_ROOT/app/Mythic/libdxmt_combined.a"
-echo "Copied to $REPO_ROOT/app/Mythic/libdxmt_combined.a"
+
+LLVM_CONFIG="$(brew --prefix llvm@15 2>/dev/null || brew --prefix llvm 2>/dev/null)/bin/llvm-config"
+LLVM_LIBS=""
+if [ -x "$LLVM_CONFIG" ]; then
+    LLVM_LIBS=$($LLVM_CONFIG --libfiles core support passes bitreader ipo instcombine scalaropts transformutils binaryformat target analysis remarks 2>/dev/null || true)
+fi
+
+if [ -n "$LLVM_LIBS" ]; then
+    echo "Merging LLVM static libraries into libdxmt_combined.a..."
+    libtool -static -o "$REPO_ROOT/app/Mythic/libdxmt_combined.a" "$OUT_LIB" $LLVM_LIBS
+else
+    cp "$OUT_LIB" "$REPO_ROOT/app/Mythic/libdxmt_combined.a"
+fi
+echo "Ready: $REPO_ROOT/app/Mythic/libdxmt_combined.a"

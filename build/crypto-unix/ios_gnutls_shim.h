@@ -19,6 +19,13 @@
  * of these files loads something else too. */
 #pragma once
 
+#ifndef HAVE_GNUTLS_CIPHER_INIT
+#define HAVE_GNUTLS_CIPHER_INIT 1
+#endif
+#ifndef SONAME_LIBGNUTLS
+#define SONAME_LIBGNUTLS "libgnutls.a"
+#endif
+
 extern void *ios_gnutls_dlopen(const char *name, int flags);
 extern void *ios_gnutls_dlsym(void *handle, const char *name);
 extern int   ios_gnutls_dlclose(void *handle);
