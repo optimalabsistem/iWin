@@ -365,48 +365,28 @@ static void sigtrap_handler(int sig, siginfo_t *info, void *context) {
 }
 
 void jit_install_trap_handler(void) {
-    // Only install if no debugger is attached.
-    // When StikDebug is attached, it handles BRK/SIGTRAP directly.
-    // Our handler would steal signals from the debugger and break the protocol.
-    if (jit_check_debugged()) {
-        jit_log("Debugger attached — skipping SIGTRAP handler (debugger handles BRK)");
-        return;
-    }
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
     sa.sa_flags = SA_SIGINFO;
     sa.sa_sigaction = sigtrap_handler;
     sigaction(SIGTRAP, &sa, NULL);
-    jit_log("SIGTRAP handler installed (no debugger)");
+    jit_log("SIGTRAP handler installed");
 }
 
-// iOS 26 BRK-based JIT syscalls.
-// These use BRK #0xf00d with x16 indicating the command.
-// When a debugger (StikDebug) is attached, it intercepts the BRK,
-// reads x16/x0/x1, performs the operation, and resumes.
-// When no debugger is attached, the SIGTRAP handler skips the BRK.
-
+// iOS 26 BRK-based JIT syscalls replaced with direct native dual-mapping.
 __attribute__((noinline, optnone))
 void *jit26_prepare_region(void *addr, size_t len) {
-    register void *x0 __asm__("x0") = addr;
-    register size_t x1 __asm__("x1") = len;
-    __asm__ volatile(
-        "mov x16, #1\n"
-        "brk #0xf00d\n"
-        : "+r"(x0)
-        : "r"(x1)
-        : "x16", "memory"
-    );
-    return x0;
+    (void)addr;
+    JITRegion *r = jit_region_create(len);
+    if (r) {
+        return jit_region_rx_ptr(r);
+    }
+    return NULL;
 }
 
 __attribute__((noinline, optnone))
 void jit26_detach(void) {
-    __asm__ volatile(
-        "mov x16, #0\n"
-        "brk #0xf00d\n"
-        ::: "x16", "memory"
-    );
+    jit_log("jit26_detach completed cleanly");
 }
 
 bool jit_check_debugged(void) {
