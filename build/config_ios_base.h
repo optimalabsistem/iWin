@@ -30,7 +30,6 @@
 #define HAVE_SYS_PARAM_H 1
 #define HAVE_SYS_IOCTL_H 1
 #define HAVE_SYS_MOUNT_H 1
-#define HAVE_SYS_STATFS_H 1
 #define HAVE_SYS_STATVFS_H 1
 #define HAVE_SYS_SYSCTL_H 1
 #define HAVE_SYS_UIO_H 1
