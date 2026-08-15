@@ -130,13 +130,17 @@ if [ -x "$LLVM_CONFIG" ]; then
     LLVM_LIB_DIR="$($LLVM_CONFIG --libdir)"
     for lib in "$LLVM_LIB_DIR"/libLLVM*.a; do
         if [ -f "$lib" ]; then
-            (cd "$LLVM_OBJ_DIR" && ar -x "$lib")
+            libname=$(basename "$lib" .a)
+            mkdir -p "$LLVM_OBJ_DIR/$libname"
+            (cd "$LLVM_OBJ_DIR/$libname" && ar -x "$lib")
         fi
     done
     python3 "$BUILD_DIR/patch_macho_ios.py" "$LLVM_OBJ_DIR"
 fi
 
 echo "=== Archiving libdxmt_combined.a ==="
-xcrun -sdk iphoneos ar rcs "$OUT_LIB" "$OBJ_DIR"/*.o "$LLVM_OBJ_DIR"/*.o
+rm -f "$OUT_LIB"
+find "$OBJ_DIR" "$LLVM_OBJ_DIR" -name "*.o" | xargs xcrun -sdk iphoneos ar -rcs "$OUT_LIB"
+xcrun -sdk iphoneos ranlib "$OUT_LIB"
 cp "$OUT_LIB" "$REPO_ROOT/app/Mythic/libdxmt_combined.a"
 echo "Ready: $REPO_ROOT/app/Mythic/libdxmt_combined.a ($(wc -c < "$REPO_ROOT/app/Mythic/libdxmt_combined.a" | tr -d ' ') bytes)"
