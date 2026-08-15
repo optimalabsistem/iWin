@@ -23,6 +23,10 @@ workflows:
           git submodule update --init FEX
           git -C FEX submodule update --init External/fmt External/range-v3 External/unordered_dense External/xxhash External/SoftFloat-3e External/cephes External/jemalloc_glibc
           
+          if [ -f patches/0001-fex-arm64-nonwin32-virtualquery-fix.patch ]; then
+            git -C FEX apply ../patches/0001-fex-arm64-nonwin32-virtualquery-fix.patch || true
+          fi
+
           SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
           CC_PATH=$(xcrun -f clang)
           CXX_PATH=$(xcrun -f clang++)
