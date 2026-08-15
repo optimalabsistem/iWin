@@ -118,10 +118,14 @@ LLVM_OBJ_DIR="$BUILD_DIR/llvm_obj"
 mkdir -p "$LLVM_OBJ_DIR"
 LLVM_CONFIG="$(brew --prefix llvm@15 2>/dev/null || brew --prefix llvm 2>/dev/null)/bin/llvm-config"
 if [ -x "$LLVM_CONFIG" ]; then
-    for lib in $($LLVM_CONFIG --libfiles core support passes bitreader ipo instcombine scalaropts transformutils binaryformat target analysis remarks 2>/dev/null || true); do
-        if [ -f "$lib" ]; then
-            (cd "$LLVM_OBJ_DIR" && ar -x "$lib")
-        fi
+    for lib in $($LLVM_CONFIG --link-static --libfiles core support passes bitreader ipo instcombine scalaropts transformutils binaryformat target analysis remarks 2>/dev/null || true); do
+        case "$lib" in
+            *.a)
+                if [ -f "$lib" ]; then
+                    (cd "$LLVM_OBJ_DIR" && ar -x "$lib")
+                fi
+                ;;
+        esac
     done
     for o in "$LLVM_OBJ_DIR"/*.o; do
         [ -f "$o" ] || continue
