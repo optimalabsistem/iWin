@@ -36,7 +36,7 @@ struct EntitlementStatus {
 
     static func check() -> EntitlementStatus {
         EntitlementStatus(
-            jitAllowed: checkAppEntitlement("com.apple.security.cs.allow-jit"),
+            jitAllowed: jit_check_debugged() || isDebuggerAttached(),
             increasedMemory: checkAppEntitlement("com.apple.developer.kernel.increased-memory-limit"),
             extendedVA: checkAppEntitlement("com.apple.developer.kernel.extended-virtual-addressing")
         )

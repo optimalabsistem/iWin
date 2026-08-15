@@ -68,6 +68,7 @@ final class RemoteLogger {
             var req = URLRequest(url: url, timeoutInterval: 3.0)
             req.httpMethod = "POST"
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.setValue("true", forHTTPHeaderField: "Bypass-Tunnel-Reminder")
             let payload: [String: String] = [
                 "level": level,
                 "message": message,
@@ -84,9 +85,12 @@ final class RemoteLogger {
             completion(false, "Invalid URL format")
             return
         }
-        let statusURL = URL(string: "http://\(host):\(baseURL.port ?? 8080)/status") ?? baseURL
+        let scheme = baseURL.scheme ?? "http"
+        let portStr = baseURL.port != nil ? ":\(baseURL.port!)" : (scheme == "http" ? ":8080" : "")
+        let statusURL = URL(string: "\(scheme)://\(host)\(portStr)/status") ?? baseURL
         var req = URLRequest(url: statusURL, timeoutInterval: 4.0)
         req.httpMethod = "GET"
+        req.setValue("true", forHTTPHeaderField: "Bypass-Tunnel-Reminder")
         
         URLSession.shared.dataTask(with: req) { data, resp, err in
             DispatchQueue.main.async {
