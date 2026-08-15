@@ -54,6 +54,7 @@ compile_one() {
 # route dlopen/dlsym at the static symtab (gnutls_symtab_ios.c).
 CRYPTO_DIR="$REPO_ROOT/build/crypto-unix"
 GNUTLS_PREFIX="$REPO_ROOT/toolchains/gnutls-ios"
+[ -d "$GNUTLS_PREFIX/include" ] || GNUTLS_PREFIX="$(brew --prefix gnutls 2>/dev/null || echo /opt/homebrew/opt/gnutls)"
 compile_unixlib() {
     local src=$1 name=$2 prefix=$3
     shift 3

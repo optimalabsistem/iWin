@@ -22,6 +22,10 @@ INCLUDES="-I$DXMT_ROOT/include -I$DXMT_ROOT/libs -I$DXMT_SRC/winemetal -I$DXMT_S
 INCLUDES_DIRECTX="-I$DXMT_ROOT/include/native/directx -I$DXMT_ROOT/include/native/windows"
 INCLUDES_SHADERS="-I$BUILD_DIR/shader-headers"
 LLVM_INCLUDES="-I$LLVM_BUILD/include -I$LLVM_SRC/include"
+if [ ! -d "$LLVM_BUILD/include" ]; then
+    LLVM_PREFIX="$(brew --prefix llvm 2>/dev/null || echo /opt/homebrew/opt/llvm)"
+    LLVM_INCLUDES="-I$LLVM_PREFIX/include"
+fi
 AIRCONV_DEFS="-D_FILE_OFFSET_BITS=64 -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS"
 CXX_FLAGS="-std=c++20 -fno-exceptions -fno-rtti"
 
@@ -93,3 +97,5 @@ echo ""
 echo "=== Archiving libdxmt_unix.a ==="
 xcrun -sdk iphoneos ar rcs "$OUT_LIB" "$OBJ_DIR"/*.o
 echo "Built: $OUT_LIB ($(wc -c < "$OUT_LIB" | tr -d ' ') bytes)"
+cp "$OUT_LIB" "$REPO_ROOT/app/Mythic/libdxmt_combined.a"
+echo "Copied to $REPO_ROOT/app/Mythic/libdxmt_combined.a"

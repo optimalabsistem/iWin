@@ -16,6 +16,7 @@ BUILD_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$BUILD_DIR/../.." && pwd)"
 WINE_SRC="$REPO_ROOT/wine"
 GNUTLS_LIB="$REPO_ROOT/toolchains/gnutls-ios/lib/libgnutls.a"
+[ -f "$GNUTLS_LIB" ] || GNUTLS_LIB="$REPO_ROOT/app/Mythic/libgnutls.a"
 OUT="$BUILD_DIR/gnutls_symtab_ios.c"
 
 SOURCES=(
