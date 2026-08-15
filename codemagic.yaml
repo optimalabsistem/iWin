@@ -29,11 +29,13 @@ workflows:
 
           cmake -B FEX/build-ios -S FEX \
             -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_SYSTEM_PROCESSOR=arm64 \
             -DCMAKE_OSX_SYSROOT="$SDK_PATH" \
             -DCMAKE_C_COMPILER="$CC_PATH" \
             -DCMAKE_CXX_COMPILER="$CXX_PATH" \
             -DCMAKE_ASM_COMPILER="$CC_PATH" \
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=17.0 \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=False \
             -DENABLE_LTO=False \
