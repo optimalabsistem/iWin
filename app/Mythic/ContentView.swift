@@ -104,6 +104,10 @@ final class MetalBackedView: UIView {
         self.isMultipleTouchEnabled = true
         self.isUserInteractionEnabled = true
         self.backgroundColor = .clear
+
+        // iPadOS hardware mouse / trackpad pointer hover
+        let hover = UIHoverGestureRecognizer(target: self, action: #selector(handleHover(_:)))
+        self.addGestureRecognizer(hover)
     }
     required init?(coder: NSCoder) { super.init(coder: coder) }
 
@@ -240,6 +244,19 @@ final class MetalBackedView: UIView {
         (event?.allTouches ?? []).filter { $0.phase != .ended && $0.phase != .cancelled }
     }
 
+    @objc private func handleHover(_ recognizer: UIHoverGestureRecognizer) {
+        guard desktopMode else { return }
+        let p = recognizer.location(in: self)
+        let r = gameRect()
+        let maxX = CGFloat(envInt("MYTHIC_SCREEN_W", 1024) - 1)
+        let maxY = CGFloat(envInt("MYTHIC_SCREEN_H", 768) - 1)
+        let normX = (p.x - r.minX) * (maxX + 1) / max(r.width, 1)
+        let normY = (p.y - r.minY) * (maxY + 1) / max(r.height, 1)
+        Self.cursor.x = min(max(normX, 0), maxX)
+        Self.cursor.y = min(max(normY, 0), maxY)
+        postPointer(F_MOVE | F_ABS)
+    }
+
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard desktopMode else {
             guard let t = touches.first else { return }
@@ -248,6 +265,10 @@ final class MetalBackedView: UIView {
             return
         }
         let now = Date().timeIntervalSinceReferenceDate
+        if let evt = event, evt.buttonMask.contains(.secondary) {
+            postPointer(F_RDOWN)
+            return
+        }
         let active = activeTouches(event)
         touchGeneration += 1
         if active.count >= 2 {
@@ -368,6 +389,10 @@ final class MetalBackedView: UIView {
             return
         }
         let now = Date().timeIntervalSinceReferenceDate
+        if let evt = event, evt.buttonMask.contains(.secondary) {
+            postPointer(F_RUP)
+            return
+        }
         if twoFingerActive {
             if activeTouches(event).isEmpty {
                 if !twoFingerMoved && now - twoFingerStartTime < 0.40
@@ -851,6 +876,7 @@ struct ContentView: View {
     @State private var debuggerAttached = isDebuggerAttached()
     @ObservedObject private var input = InputSettings.shared
     @State private var pointerPanel = false
+    @State private var showingFileImporter = false
     @Namespace private var pointerNS
     /// .compact = iPhone landscape: game surface expands, arrow keys appear.
     @Environment(\.verticalSizeClass) private var vSizeClass
@@ -890,6 +916,9 @@ struct ContentView: View {
                 jit_install_trap_handler()
                 entitlements = EntitlementStatus.check()
                 logEntitlementStatus()
+            }
+            .fileImporter(isPresented: $showingFileImporter, allowedContentTypes: [.item]) { result in
+                handleImportedFile(result)
             }
         }
     }
@@ -1138,6 +1167,14 @@ struct ContentView: View {
                     enableJITViaStikDebug()
                 }
                 .buttonStyle(.borderedProminent)
+
+                Button {
+                    showingFileImporter = true
+                } label: {
+                    Label("Run EXE (Files)", systemImage: "folder.badge.plus")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.purple)
 
                 Button("Steam Testing") {
                     // Steam S3 first boot: virtual desktop (Steam needs a
@@ -1534,6 +1571,37 @@ struct ContentView: View {
         f.dateFormat = "HH:mm:ss"
         return f
     }()
+
+    private func handleImportedFile(_ result: Result<URL, Error>) {
+        switch result {
+        case .success(let url):
+            guard url.startAccessingSecurityScopedResource() else {
+                logStore.log("Failed to access security scoped URL", level: .error)
+                return
+            }
+            defer { url.stopAccessingSecurityScopedResource() }
+
+            let fm = FileManager.default
+            let docs = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let wineDir = docs.appendingPathComponent("wine/drive_c/Games", isDirectory: true)
+            try? fm.createDirectory(at: wineDir, withIntermediateDirectories: true)
+
+            let destUrl = wineDir.appendingPathComponent(url.lastPathComponent)
+            try? fm.removeItem(at: destUrl)
+            do {
+                try fm.copyItem(at: url, to: destUrl)
+                let winPath = "C:\\Games\\\(url.lastPathComponent)"
+                logStore.log("Imported custom executable: \(winPath)", level: .success)
+                setenv("MYTHIC_EXE", winPath, 1)
+                setenv("MYTHIC_DESKTOP", "1", 1)
+                runWineFullSequence()
+            } catch {
+                logStore.log("Failed to copy executable: \(error.localizedDescription)", level: .error)
+            }
+        case .failure(let error):
+            logStore.log("File import cancelled or failed: \(error.localizedDescription)", level: .info)
+        }
+    }
 
     // Main-thread only (SwiftUI body evaluation) — DateFormatter is not safe to
     // share across threads.
