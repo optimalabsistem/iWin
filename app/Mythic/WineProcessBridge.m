@@ -671,38 +671,25 @@ static void *wine_process_thread(void *arg) {
             }
         }
 
-        // Populate direct Start Menu items (File Explorer, 3D Cube, Task Manager) without nested folders or autostart
+        // Keep Start Menu directories 100% clean and empty so Wine's Start Menu
+        // renders simply and reliably with Run... and Exit Desktop without COM shell deadlocks.
         {
             NSString *prefix = [NSString stringWithUTF8String:g_prefix_path];
             NSFileManager *fm = [NSFileManager defaultManager];
             
-            // Clean subfolders so COM doesn't walk nested trees or trigger autostart
             NSArray *cleanDirs = @[
                 [prefix stringByAppendingPathComponent:@"drive_c/users/Public/Desktop"],
                 [prefix stringByAppendingPathComponent:@"drive_c/users/admin/Desktop"],
+                [prefix stringByAppendingPathComponent:@"drive_c/ProgramData/Microsoft/Windows/Start Menu"],
                 [prefix stringByAppendingPathComponent:@"drive_c/ProgramData/Microsoft/Windows/Start Menu/Programs"],
+                [prefix stringByAppendingPathComponent:@"drive_c/users/admin/AppData/Roaming/Microsoft/Windows/Start Menu"],
                 [prefix stringByAppendingPathComponent:@"drive_c/users/admin/AppData/Roaming/Microsoft/Windows/Start Menu/Programs"]
             ];
             for (NSString *d in cleanDirs) {
                 [fm removeItemAtPath:d error:nil];
                 [fm createDirectoryAtPath:d withIntermediateDirectories:YES attributes:nil error:nil];
             }
-
-            // Populate direct root Start Menu items (appear directly on Start Menu above Run)
-            NSString *startMenuDir = [prefix stringByAppendingPathComponent:@"drive_c/ProgramData/Microsoft/Windows/Start Menu"];
-            [fm createDirectoryAtPath:startMenuDir withIntermediateDirectories:YES attributes:nil error:nil];
-            
-            NSDictionary *startItems = @{
-                @"File Explorer.bat": @"@echo off\r\nstart \"\" \"C:\\windows\\explorer.exe\" /e,C:\\\r\n",
-                @"3D Cube Test.bat": @"@echo off\r\nstart \"\" \"C:\\windows\\system32\\cube.exe\"\r\n",
-                @"Task Manager.bat": @"@echo off\r\nstart \"\" \"C:\\windows\\system32\\taskmgr.exe\"\r\n"
-            };
-            for (NSString *name in startItems) {
-                NSString *p = [startMenuDir stringByAppendingPathComponent:name];
-                [startItems[name] writeToFile:p atomically:YES encoding:NSUTF8StringEncoding error:nil];
-            }
-            dprintf(STDERR_FILENO, "[WineProc] Created %lu direct Start Menu items in %s\n",
-                    (unsigned long)startItems.count, startMenuDir.UTF8String);
+            dprintf(STDERR_FILENO, "[WineProc] Start Menu directories cleared for simple responsive menu\n");
         }
 
         // Build the launch path for Wine's PE loader.
