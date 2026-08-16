@@ -2421,35 +2421,43 @@ static void *ios_mach_exception_thread( void *arg )
                  * that never got dual-mapped. Capped. */
                 if (!rw_addr && (uintptr_t)fault_pc >= 0x100000000ULL)
                 {
-                    static int noalias_n;
-                    if (noalias_n < 8)
+                    mach_vm_address_t na = (mach_vm_address_t)fault_addr;
+                    mach_vm_size_t ns = 0;
+                    vm_region_basic_info_data_64_t ni;
+                    mach_msg_type_number_t nc = VM_REGION_BASIC_INFO_COUNT_64;
+                    mach_port_t no = MACH_PORT_NULL;
+                    if (mach_vm_region(mach_task_self(), &na, &ns, VM_REGION_BASIC_INFO_64,
+                                       (vm_region_info_t)&ni, &nc, &no) == KERN_SUCCESS)
                     {
-                        mach_vm_address_t na = (mach_vm_address_t)fault_addr;
-                        mach_vm_size_t ns = 0;
-                        vm_region_basic_info_data_64_t ni;
-                        mach_msg_type_number_t nc = VM_REGION_BASIC_INFO_COUNT_64;
-                        mach_port_t no = MACH_PORT_NULL;
-                        uint32_t ninsn = 0;
-                        mach_vm_size_t ngot = 0;
-                        noalias_n++;
-                        mach_vm_read_overwrite(mach_task_self(), (mach_vm_address_t)fault_pc, 4,
-                                               (mach_vm_address_t)&ninsn, &ngot);
-                        if (mach_vm_region(mach_task_self(), &na, &ns, VM_REGION_BASIC_INFO_64,
-                                           (vm_region_info_t)&ni, &nc, &no) == KERN_SUCCESS)
+                        if (!(ni.protection & VM_PROT_WRITE))
+                        {
+                            if (mach_vm_protect(mach_task_self(), na, ns, FALSE, VM_PROT_READ | VM_PROT_WRITE) == KERN_SUCCESS)
+                            {
+                                dprintf(STDERR_FILENO,
+                                    "[mach-heal] Restored RW to region 0x%llx+0x%llx for fault at 0x%llx (was prot=%d)\n",
+                                    (unsigned long long)na, (unsigned long long)ns, (unsigned long long)fault_addr, ni.protection);
+                                handled = 1;
+                            }
+                        }
+                    }
+                    if (!handled)
+                    {
+                        static int noalias_n;
+                        if (noalias_n < 8)
+                        {
+                            uint32_t ninsn = 0;
+                            mach_vm_size_t ngot = 0;
+                            noalias_n++;
+                            mach_vm_read_overwrite(mach_task_self(), (mach_vm_address_t)fault_pc, 4,
+                                                   (mach_vm_address_t)&ninsn, &ngot);
                             dprintf(STDERR_FILENO,
                                 "[store-noalias] #%d rev=ml348 addr=0x%llx insn=0x%08x pc=0x%llx "
-                                "NO pool/anon alias | region 0x%llx+0x%llx prot=%d max=%d "
-                                "(prot without W = exec-downgraded page that never got dual-mapped)\n",
+                                "NO pool/anon alias | region 0x%llx+0x%llx prot=%d max=%d\n",
                                 noalias_n, (unsigned long long)fault_addr, ninsn,
                                 (unsigned long long)fault_pc,
                                 (unsigned long long)na, (unsigned long long)ns,
                                 ni.protection, ni.max_protection);
-                        else
-                            dprintf(STDERR_FILENO,
-                                "[store-noalias] #%d rev=ml348 addr=0x%llx insn=0x%08x pc=0x%llx "
-                                "NO alias and NO region (unmapped) — genuine bad pointer\n",
-                                noalias_n, (unsigned long long)fault_addr, ninsn,
-                                (unsigned long long)fault_pc);
+                        }
                     }
                 }
                 if (rw_addr && (uintptr_t)fault_pc >= 0x100000000ULL)
@@ -9176,6 +9184,28 @@ static void bus_handler( int signal, siginfo_t *siginfo, void *sigcontext )
                         siginfo->si_addr, pc);
                 ios_fixup_x18_for_return( bus_ctx );
                 return;
+            }
+
+            {
+                mach_vm_address_t ba = (mach_vm_address_t)(uintptr_t)siginfo->si_addr;
+                mach_vm_size_t bs = 0;
+                vm_region_basic_info_data_64_t bbi;
+                mach_msg_type_number_t bbc = VM_REGION_BASIC_INFO_COUNT_64;
+                mach_port_t bbo = MACH_PORT_NULL;
+                if (mach_vm_region( mach_task_self(), &ba, &bs, VM_REGION_BASIC_INFO_64,
+                                    (vm_region_info_t)&bbi, &bbc, &bbo ) == KERN_SUCCESS)
+                {
+                    if (!(bbi.protection & VM_PROT_WRITE))
+                    {
+                        if (mach_vm_protect(mach_task_self(), ba, bs, FALSE, VM_PROT_READ | VM_PROT_WRITE) == KERN_SUCCESS)
+                        {
+                            dprintf(STDERR_FILENO, "[bus-heal-rw] Restored RW to region 0x%llx+0x%llx for fault at %p (was prot=%d)\n",
+                                    (unsigned long long)ba, (unsigned long long)bs, siginfo->si_addr, bbi.protection);
+                            ios_fixup_x18_for_return( bus_ctx );
+                            return;
+                        }
+                    }
+                }
             }
 
             rd_kr = mach_vm_read_overwrite( mach_task_self(),

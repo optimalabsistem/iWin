@@ -11480,16 +11480,22 @@ static NTSTATUS virtual_map_image( HANDLE mapping, void **addr_ptr, SIZE_T *size
                     SIZE_T align_mask = max(image_info->alignment - 1, page_mask);
                     for (int i = 0; i < nt->FileHeader.NumberOfSections; i++)
                     {
-                        if (!(s[i].Characteristics & IMAGE_SCN_MEM_EXECUTE)) continue;
                         SIZE_T sec_size = s[i].Misc.VirtualSize
                             ? ROUND_SIZE(s[i].VirtualAddress, s[i].Misc.VirtualSize, align_mask)
                             : ROUND_SIZE(s[i].VirtualAddress, s[i].SizeOfRawData, align_mask);
                         void *sec_addr = (char *)view->base + s[i].VirtualAddress;
-                        int prot = PROT_READ | PROT_EXEC;
-                        if (s[i].Characteristics & IMAGE_SCN_MEM_WRITE) prot |= PROT_WRITE;
-                        ERR("iOS: eager JIT-copy for builtin %s section (base=%p size=0x%lx)\n",
-                            s[i].Name, sec_addr, (unsigned long)sec_size);
-                        mprotect_exec(sec_addr, sec_size, prot);
+                        if (s[i].Characteristics & IMAGE_SCN_MEM_EXECUTE)
+                        {
+                            int prot = PROT_READ | PROT_EXEC;
+                            if (s[i].Characteristics & IMAGE_SCN_MEM_WRITE) prot |= PROT_WRITE;
+                            ERR("iOS: eager JIT-copy for builtin %s section (base=%p size=0x%lx)\n",
+                                s[i].Name, sec_addr, (unsigned long)sec_size);
+                            mprotect_exec(sec_addr, sec_size, prot);
+                        }
+                        else if (s[i].Characteristics & IMAGE_SCN_MEM_WRITE)
+                        {
+                            mach_vm_protect(mach_task_self(), (mach_vm_address_t)(uintptr_t)sec_addr, sec_size, FALSE, VM_PROT_READ | VM_PROT_WRITE);
+                        }
                     }
                 }
             }
