@@ -818,6 +818,93 @@ extension MetalBackedView: UIKeyInput {
     var smartQuotesType: UITextSmartQuotesType { get { .no } set {} }
     var smartDashesType: UITextSmartDashesType { get { .no } set {} }
     var spellCheckingType: UITextSpellCheckingType { get { .no } set {} }
+
+    // Physical Hardware Keyboard (Goojodoq, Magic Keyboard, Bluetooth Keyboards)
+    private func mapUIKeyToVK(_ key: UIKey) -> Int32 {
+        switch key.keyCode {
+        case .keyboardEscape: return 0x1B
+        case .keyboardReturnOrEnter: return 0x0D
+        case .keyboardTab: return 0x09
+        case .keyboardSpacebar: return 0x20
+        case .keyboardDeleteOrBackspace: return 0x08
+        case .keyboardUpArrow: return 0x26
+        case .keyboardDownArrow: return 0x28
+        case .keyboardLeftArrow: return 0x25
+        case .keyboardRightArrow: return 0x27
+        case .keyboardLeftControl, .keyboardRightControl: return 0x11
+        case .keyboardLeftShift, .keyboardRightShift: return 0x10
+        case .keyboardLeftAlt, .keyboardRightAlt: return 0x12
+        case .keyboardLeftGUI, .keyboardRightGUI: return 0x5B
+        case .keyboardF1: return 0x70
+        case .keyboardF2: return 0x71
+        case .keyboardF3: return 0x72
+        case .keyboardF4: return 0x73
+        case .keyboardF5: return 0x74
+        case .keyboardF6: return 0x75
+        case .keyboardF7: return 0x76
+        case .keyboardF8: return 0x77
+        case .keyboardF9: return 0x78
+        case .keyboardF10: return 0x79
+        case .keyboardF11: return 0x7A
+        case .keyboardF12: return 0x7B
+        default: break
+        }
+        if let first = key.charactersIgnoringModifiers.uppercased().first {
+            if let ascii = first.asciiValue {
+                if (ascii >= 0x41 && ascii <= 0x5A) || (ascii >= 0x30 && ascii <= 0x39) {
+                    return Int32(ascii)
+                }
+            }
+            if let (vk, _) = MetalBackedView.vkForChar(first) {
+                return vk
+            }
+        }
+        return 0
+    }
+
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        var handled = false
+        for press in presses {
+            if let key = press.key {
+                let vk = mapUIKeyToVK(key)
+                if vk != 0 {
+                    winios_post_key(vk, 1)
+                    handled = true
+                }
+            }
+        }
+        if !handled {
+            super.pressesBegan(presses, with: event)
+        }
+    }
+
+    override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        var handled = false
+        for press in presses {
+            if let key = press.key {
+                let vk = mapUIKeyToVK(key)
+                if vk != 0 {
+                    winios_post_key(vk, 0)
+                    handled = true
+                }
+            }
+        }
+        if !handled {
+            super.pressesEnded(presses, with: event)
+        }
+    }
+
+    override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        for press in presses {
+            if let key = press.key {
+                let vk = mapUIKeyToVK(key)
+                if vk != 0 {
+                    winios_post_key(vk, 0)
+                }
+            }
+        }
+        super.pressesCancelled(presses, with: event)
+    }
 }
 
 /// Pointer settings, persisted to the app container.
