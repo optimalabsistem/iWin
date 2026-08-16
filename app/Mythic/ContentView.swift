@@ -1368,7 +1368,7 @@ struct ContentView: View {
         let w = parts.count == 2 ? (Int(parts[0]) ?? 1280) : 1280
         let h = parts.count == 2 ? (Int(parts[1]) ?? 720) : 720
         setenv("MYTHIC_EXE", "explorer.exe", 1)
-        setenv("MYTHIC_ARGS", "/desktop=shell,\(w)x\(h) cube.exe", 1)
+        setenv("MYTHIC_ARGS", "/desktop=shell,\(w)x\(h) C:\\windows\\system32\\cmd.exe /c start C:\\windows\\system32\\cube.exe", 1)
         setenv("MYTHIC_DESKTOP", "1", 1)
         setenv("MYTHIC_SCREEN_W", String(w), 1)
         setenv("MYTHIC_SCREEN_H", String(h), 1)
@@ -1378,9 +1378,14 @@ struct ContentView: View {
     }
 
     private func launchStandalone3DTest(_ exeName: String = "cube.exe") {
-        setenv("MYTHIC_EXE", exeName, 1)
-        unsetenv("MYTHIC_ARGS")
-        unsetenv("MYTHIC_DESKTOP")
+        let parts = desktopResolution.split(separator: "x")
+        let w = parts.count == 2 ? (Int(parts[0]) ?? 1280) : 1280
+        let h = parts.count == 2 ? (Int(parts[1]) ?? 720) : 720
+        setenv("MYTHIC_EXE", "explorer.exe", 1)
+        setenv("MYTHIC_ARGS", "/desktop=shell,\(w)x\(h) C:\\windows\\system32\\\(exeName)", 1)
+        setenv("MYTHIC_DESKTOP", "1", 1)
+        setenv("MYTHIC_SCREEN_W", String(w), 1)
+        setenv("MYTHIC_SCREEN_H", String(h), 1)
         unsetenv("MYTHIC_USE_ARM64EC")
         selectedTab = .screen
         runWineFullSequence()
