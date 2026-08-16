@@ -7457,21 +7457,21 @@ static inline int mprotect_exec( void *base, size_t size, int unix_prot )
          * mmap-downgrade.  Only when maxprot lacks WRITE (code-signed PE
          * files — the IAT case this path was built for) fall back to +COPY,
          * where privatizing is correct since PE data is per-process anyway. */
-        kern_return_t kr = vm_protect(mach_task_self(), (vm_address_t)base, size,
-                                      FALSE,  /* set_maximum */
-                                      VM_PROT_READ | VM_PROT_WRITE);
+        kern_return_t kr = mach_vm_protect(mach_task_self(), (mach_vm_address_t)(uintptr_t)base, (mach_vm_size_t)size,
+                                            FALSE,  /* set_maximum */
+                                            VM_PROT_READ | VM_PROT_WRITE);
         if (kr == KERN_SUCCESS) return 0;
-        kr = vm_protect(mach_task_self(), (vm_address_t)base, size,
-                        FALSE,  /* set_maximum */
-                        VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+        kr = mach_vm_protect(mach_task_self(), (mach_vm_address_t)(uintptr_t)base, (mach_vm_size_t)size,
+                             FALSE,  /* set_maximum */
+                             VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
         if (kr == KERN_SUCCESS) {
             if (!ios_in_mach_exc)
-                ERR("iOS vm_protect RW+COPY OK at %p+0x%lx (plain RW refused — privatized)\n",
+                ERR("iOS mach_vm_protect RW+COPY OK at %p+0x%lx (plain RW refused — privatized)\n",
                     base, (unsigned long)size);
             return 0;
         }
         if (!ios_in_mach_exc)
-            ERR("iOS vm_protect RW failed kr=%d at %p+0x%lx — falling to mprotect\n",
+            ERR("iOS mach_vm_protect RW failed kr=%d at %p+0x%lx — falling to mprotect\n",
                 kr, base, (unsigned long)size);
     }
 
