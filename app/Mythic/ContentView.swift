@@ -127,7 +127,8 @@ final class MetalBackedView: UIView {
     /// display edges (2026-07-05). Touch mapping uses the same rect so
     /// letterboxing never skews input.
     private func gameRect() -> CGRect {
-        let gw: CGFloat = 1024, gh: CGFloat = 768
+        let gw = CGFloat(envInt("MYTHIC_SCREEN_W", 1280))
+        let gh = CGFloat(envInt("MYTHIC_SCREEN_H", 720))
         let scale = min(bounds.width / gw, bounds.height / gh)
         let w = gw * scale, h = gh * scale
         return CGRect(x: (bounds.width - w) / 2, y: (bounds.height - h) / 2,
@@ -238,7 +239,8 @@ final class MetalBackedView: UIView {
         return i
     }
     private func postPointer(_ flags: UInt32, data: Int32 = 0) {
-        winios_pointer(Int32(Self.cursor.x), Int32(Self.cursor.y), flags, UInt32(bitPattern: data))
+        let combined = InputSettings.shared.relative ? flags : (flags | F_MOVE | F_ABS)
+        winios_pointer(Int32(Self.cursor.x), Int32(Self.cursor.y), combined, UInt32(bitPattern: data))
     }
     private func avgPoint(_ touches: [UITouch]) -> CGPoint {
         var x: CGFloat = 0, y: CGFloat = 0
@@ -254,8 +256,8 @@ final class MetalBackedView: UIView {
         guard desktopMode else { return }
         let p = recognizer.location(in: self)
         let r = gameRect()
-        let maxX = CGFloat(envInt("MYTHIC_SCREEN_W", 1024) - 1)
-        let maxY = CGFloat(envInt("MYTHIC_SCREEN_H", 768) - 1)
+        let maxX = CGFloat(envInt("MYTHIC_SCREEN_W", 1280) - 1)
+        let maxY = CGFloat(envInt("MYTHIC_SCREEN_H", 720) - 1)
         let normX = (p.x - r.minX) * (maxX + 1) / max(r.width, 1)
         let normY = (p.y - r.minY) * (maxY + 1) / max(r.height, 1)
         Self.cursor.x = min(max(normX, 0), maxX)
@@ -380,8 +382,8 @@ final class MetalBackedView: UIView {
         }
 
         let sens = CGFloat(InputSettings.shared.sensAbs)   // desktop px per view pt
-        let maxX = CGFloat(envInt("MYTHIC_SCREEN_W", 1024) - 1)
-        let maxY = CGFloat(envInt("MYTHIC_SCREEN_H", 768) - 1)
+        let maxX = CGFloat(envInt("MYTHIC_SCREEN_W", 1280) - 1)
+        let maxY = CGFloat(envInt("MYTHIC_SCREEN_H", 720) - 1)
         Self.cursor.x = min(max(Self.cursor.x + dx * sens, 0), maxX)
         Self.cursor.y = min(max(Self.cursor.y + dy * sens, 0), maxY)
         postPointer(F_MOVE | F_ABS)
