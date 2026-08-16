@@ -1066,7 +1066,78 @@ struct ContentView: View {
 
     private var screenTabView: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
+                // Windows Start Menu Instant Trigger
+                Menu {
+                    Button {
+                        launchAppInDesktop("C:\\windows\\explorer.exe /e,C:\\")
+                    } label: {
+                        Label("File Explorer", systemImage: "folder.fill")
+                    }
+
+                    Button {
+                        launchStandalone3DTest("cube.exe")
+                    } label: {
+                        Label("3D Cube Test (Metal)", systemImage: "cube.fill")
+                    }
+
+                    Button {
+                        launchStandalone3DTest("triangle.exe")
+                    } label: {
+                        Label("3D Triangle Test", systemImage: "triangle.fill")
+                    }
+
+                    Button {
+                        launchAppInDesktop("C:\\windows\\system32\\taskmgr.exe")
+                    } label: {
+                        Label("Task Manager", systemImage: "chart.bar.xaxis")
+                    }
+
+                    Button {
+                        launchAppInDesktop("C:\\windows\\system32\\cmd.exe")
+                    } label: {
+                        Label("Command Prompt", systemImage: "terminal.fill")
+                    }
+
+                    Button {
+                        launchAppInDesktop("C:\\windows\\system32\\winemine.exe")
+                    } label: {
+                        Label("Minesweeper", systemImage: "gamecontroller.fill")
+                    }
+
+                    Button {
+                        launchAppInDesktop("C:\\windows\\system32\\notepad.exe")
+                    } label: {
+                        Label("Notepad", systemImage: "doc.text.fill")
+                    }
+
+                    Button {
+                        launchAppInDesktop("C:\\windows\\system32\\winecfg.exe")
+                    } label: {
+                        Label("Wine Configuration", systemImage: "gearshape.fill")
+                    }
+
+                    Divider()
+
+                    Button {
+                        showingFileImporter = true
+                    } label: {
+                        Label("Run Custom .EXE...", systemImage: "folder.badge.plus")
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "square.grid.2x2.fill")
+                            .font(.system(size: 13, weight: .bold))
+                        Text("Start")
+                            .font(.system(size: 13, weight: .bold))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(6)
+                }
+
                 FPSOverlay()
                 Spacer()
                 Text("Desktop: \(desktopResolution)")
