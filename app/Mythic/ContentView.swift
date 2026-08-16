@@ -1072,7 +1072,7 @@ struct ContentView: View {
                 // Windows Start Menu Instant Trigger
                 Menu {
                     Button {
-                        launchAppInDesktop("C:\\windows\\explorer.exe /e,C:\\")
+                        launchDirectApp("explorer.exe", args: "/e,C:\\")
                     } label: {
                         Label("File Explorer", systemImage: "folder.fill")
                     }
@@ -1090,31 +1090,31 @@ struct ContentView: View {
                     }
 
                     Button {
-                        launchAppInDesktop("C:\\windows\\system32\\taskmgr.exe")
+                        launchDirectApp("taskmgr.exe")
                     } label: {
                         Label("Task Manager", systemImage: "chart.bar.xaxis")
                     }
 
                     Button {
-                        launchAppInDesktop("C:\\windows\\system32\\cmd.exe")
+                        launchDirectApp("cmd.exe")
                     } label: {
                         Label("Command Prompt", systemImage: "terminal.fill")
                     }
 
                     Button {
-                        launchAppInDesktop("C:\\windows\\system32\\winemine.exe")
+                        launchDirectApp("winemine.exe")
                     } label: {
                         Label("Minesweeper", systemImage: "gamecontroller.fill")
                     }
 
                     Button {
-                        launchAppInDesktop("C:\\windows\\system32\\notepad.exe")
+                        launchDirectApp("notepad.exe")
                     } label: {
                         Label("Notepad", systemImage: "doc.text.fill")
                     }
 
                     Button {
-                        launchAppInDesktop("C:\\windows\\system32\\winecfg.exe")
+                        launchDirectApp("winecfg.exe")
                     } label: {
                         Label("Wine Configuration", systemImage: "gearshape.fill")
                     }
@@ -1254,7 +1254,7 @@ struct ContentView: View {
 
                     HStack(spacing: 10) {
                         Button {
-                            launchAppInDesktop("C:\\windows\\explorer.exe /e,C:\\")
+                            launchDirectApp("explorer.exe", args: "/e,C:\\")
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "folder.fill")
@@ -1268,7 +1268,7 @@ struct ContentView: View {
                         .tint(.blue)
 
                         Button {
-                            launchAppInDesktop("C:\\windows\\system32\\taskmgr.exe")
+                            launchDirectApp("taskmgr.exe")
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "chart.bar.xaxis")
@@ -1282,7 +1282,7 @@ struct ContentView: View {
                         .tint(.secondary)
 
                         Button {
-                            launchAppInDesktop("C:\\windows\\system32\\winecfg.exe")
+                            launchDirectApp("winecfg.exe")
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "gearshape.fill")
@@ -1605,9 +1605,27 @@ struct ContentView: View {
         let parts = desktopResolution.split(separator: "x")
         let w = parts.count == 2 ? (Int(parts[0]) ?? 1280) : 1280
         let h = parts.count == 2 ? (Int(parts[1]) ?? 720) : 720
-        setenv("MYTHIC_EXE", "explorer.exe", 1)
-        setenv("MYTHIC_ARGS", "/desktop=shell,\(w)x\(h) C:\\windows\\system32\\\(exeName)", 1)
-        setenv("MYTHIC_DESKTOP", "1", 1)
+        setenv("MYTHIC_EXE", exeName, 1)
+        unsetenv("MYTHIC_ARGS")
+        unsetenv("MYTHIC_DESKTOP")
+        setenv("MYTHIC_SCREEN_W", String(w), 1)
+        setenv("MYTHIC_SCREEN_H", String(h), 1)
+        unsetenv("MYTHIC_USE_ARM64EC")
+        selectedTab = .screen
+        runWineFullSequence()
+    }
+
+    private func launchDirectApp(_ exeName: String, args: String? = nil) {
+        let parts = desktopResolution.split(separator: "x")
+        let w = parts.count == 2 ? (Int(parts[0]) ?? 1280) : 1280
+        let h = parts.count == 2 ? (Int(parts[1]) ?? 720) : 720
+        setenv("MYTHIC_EXE", exeName, 1)
+        if let a = args, !a.isEmpty {
+            setenv("MYTHIC_ARGS", a, 1)
+        } else {
+            unsetenv("MYTHIC_ARGS")
+        }
+        unsetenv("MYTHIC_DESKTOP")
         setenv("MYTHIC_SCREEN_W", String(w), 1)
         setenv("MYTHIC_SCREEN_H", String(h), 1)
         unsetenv("MYTHIC_USE_ARM64EC")
@@ -1616,17 +1634,7 @@ struct ContentView: View {
     }
 
     private func launchAppInDesktop(_ exeName: String) {
-        let parts = desktopResolution.split(separator: "x")
-        let w = parts.count == 2 ? (Int(parts[0]) ?? 1280) : 1280
-        let h = parts.count == 2 ? (Int(parts[1]) ?? 720) : 720
-        setenv("MYTHIC_EXE", "explorer.exe", 1)
-        setenv("MYTHIC_ARGS", "/desktop=shell,\(w)x\(h) \(exeName)", 1)
-        setenv("MYTHIC_DESKTOP", "1", 1)
-        setenv("MYTHIC_SCREEN_W", String(w), 1)
-        setenv("MYTHIC_SCREEN_H", String(h), 1)
-        unsetenv("MYTHIC_USE_ARM64EC")
-        selectedTab = .screen
-        runWineFullSequence()
+        launchDirectApp(exeName)
     }
 
     private func launchSteamWithSettings() {
