@@ -3398,14 +3398,17 @@ skip_reclaim_band: ;
                 if (mach_vm_region(mach_task_self(), &na, &ns, VM_REGION_BASIC_INFO_64,
                                    (vm_region_info_t)&ni, &nc, &no) == KERN_SUCCESS)
                 {
-                    if (ni.protection == 0 || !(ni.protection & VM_PROT_READ))
+                    if (na <= (mach_vm_address_t)fault_addr && (mach_vm_address_t)fault_addr < na + ns)
                     {
-                        if (mach_vm_protect(mach_task_self(), na, ns, FALSE, VM_PROT_READ | VM_PROT_WRITE) == KERN_SUCCESS)
+                        if (ni.protection == 0 || !(ni.protection & VM_PROT_WRITE))
                         {
-                            dprintf(STDERR_FILENO,
-                                "[mach-heal-page] Restored RW to unmapped region 0x%llx+0x%llx for fault at 0x%llx (was prot=%d)\n",
-                                (unsigned long long)na, (unsigned long long)ns, (unsigned long long)fault_addr, ni.protection);
-                            handled = 1;
+                            if (mach_vm_protect(mach_task_self(), na, ns, FALSE, VM_PROT_READ | VM_PROT_WRITE) == KERN_SUCCESS)
+                            {
+                                dprintf(STDERR_FILENO,
+                                    "[mach-heal-page] Restored RW to region 0x%llx+0x%llx for fault at 0x%llx (was prot=%d)\n",
+                                    (unsigned long long)na, (unsigned long long)ns, (unsigned long long)fault_addr, ni.protection);
+                                handled = 1;
+                            }
                         }
                     }
                 }
