@@ -3388,6 +3388,29 @@ static void *ios_mach_exception_thread( void *arg )
 skip_reclaim_band: ;
             }
 
+            if (!handled && (uintptr_t)fault_pc >= 0x100000000ULL && (uintptr_t)fault_addr >= 0x100000000ULL)
+            {
+                mach_vm_address_t na = (mach_vm_address_t)fault_addr;
+                mach_vm_size_t ns = 0;
+                vm_region_basic_info_data_64_t ni;
+                mach_msg_type_number_t nc = VM_REGION_BASIC_INFO_COUNT_64;
+                mach_port_t no = MACH_PORT_NULL;
+                if (mach_vm_region(mach_task_self(), &na, &ns, VM_REGION_BASIC_INFO_64,
+                                   (vm_region_info_t)&ni, &nc, &no) == KERN_SUCCESS)
+                {
+                    if (ni.protection == 0 || !(ni.protection & VM_PROT_READ))
+                    {
+                        if (mach_vm_protect(mach_task_self(), na, ns, FALSE, VM_PROT_READ | VM_PROT_WRITE) == KERN_SUCCESS)
+                        {
+                            dprintf(STDERR_FILENO,
+                                "[mach-heal-page] Restored RW to unmapped region 0x%llx+0x%llx for fault at 0x%llx (was prot=%d)\n",
+                                (unsigned long long)na, (unsigned long long)ns, (unsigned long long)fault_addr, ni.protection);
+                            handled = 1;
+                        }
+                    }
+                }
+            }
+
             /* ml369 (#63): last-resort in-process guest exception delivery.
              * Nothing above claimed the fault; declining it is a death
              * sentence under StikDebug (the stub cannot inject signals, so
