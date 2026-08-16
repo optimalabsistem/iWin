@@ -984,6 +984,56 @@ struct ContentView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 4)
 
+            // Quick App Launch Bar
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    Button("🎲 3D Cube") {
+                        launchAppInDesktop("cube.exe")
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.orange)
+
+                    Button("🔺 3D Triangle") {
+                        launchAppInDesktop("triangle.exe")
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.blue)
+
+                    Button("🖼️ TexQuad 3D") {
+                        launchAppInDesktop("texquad.exe")
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.teal)
+
+                    Button("🚩 Minesweeper") {
+                        launchAppInDesktop("winemine.exe")
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.red)
+
+                    Button("📊 Taskmgr") {
+                        launchAppInDesktop("taskmgr.exe")
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.indigo)
+
+                    Button("📝 Notepad") {
+                        launchAppInDesktop("notepad.exe")
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.green)
+
+                    Button("⚙️ Winecfg") {
+                        launchAppInDesktop("winecfg.exe")
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.gray)
+                }
+                .font(.caption.weight(.medium))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 2)
+            }
+
             ZStack {
                 Color.black
                 MythicMetalView()
@@ -1120,31 +1170,8 @@ struct ContentView: View {
                 .padding(16)
                 .background(RoundedRectangle(cornerRadius: 14).fill(Color(UIColor.secondarySystemBackground)))
 
-                // Card Grid: Steam, 3D Benchmark & Windows Utilities
+                // Card Grid: 3D Benchmark & Windows Utilities
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Image(systemName: "gamecontroller.fill")
-                                .font(.title3)
-                                .foregroundColor(.mint)
-                            Spacer()
-                        }
-                        Text("Steam Client")
-                            .font(.subheadline.weight(.semibold))
-                        Text("Launch Steam with RPCSS & network stack.")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                            .lineLimit(2)
-                        Button("Launch Steam") {
-                            launchSteamWithSettings()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.mint)
-                        .font(.caption.weight(.medium))
-                    }
-                    .padding(12)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
-
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
                             Image(systemName: "cube.transparent.fill")
@@ -1152,27 +1179,40 @@ struct ContentView: View {
                                 .foregroundColor(.orange)
                             Spacer()
                         }
-                        Text("3D Metal Test")
+                        Text("3D Metal Cube")
                             .font(.subheadline.weight(.semibold))
-                        Text("x86_64 JIT + DirectX 11 Metal 3D test.")
+                        Text("DirectX 11 Metal 3D Spinning Cube with real-time FPS.")
                             .font(.caption2)
                             .foregroundColor(.secondary)
                             .lineLimit(2)
                         Button("Run 3D Cube") {
-                            let parts = desktopResolution.split(separator: "x")
-                            let w = parts.count == 2 ? (Int(parts[0]) ?? 1280) : 1280
-                            let h = parts.count == 2 ? (Int(parts[1]) ?? 720) : 720
-                            setenv("MYTHIC_EXE", "explorer.exe", 1)
-                            setenv("MYTHIC_ARGS", "/desktop=shell,\(w)x\(h) cube.exe", 1)
-                            setenv("MYTHIC_DESKTOP", "1", 1)
-                            setenv("MYTHIC_SCREEN_W", String(w), 1)
-                            setenv("MYTHIC_SCREEN_H", String(h), 1)
-                            unsetenv("MYTHIC_USE_ARM64EC")
-                            selectedTab = .screen
-                            runWineFullSequence()
+                            launchAppInDesktop("cube.exe")
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.orange)
+                        .font(.caption.weight(.medium))
+                    }
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Image(systemName: "triangle.fill")
+                                .font(.title3)
+                                .foregroundColor(.blue)
+                            Spacer()
+                        }
+                        Text("3D Metal Triangle")
+                            .font(.subheadline.weight(.semibold))
+                        Text("DirectX 11 Metal RGB Triangle render benchmark.")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .lineLimit(2)
+                        Button("Run Triangle") {
+                            launchAppInDesktop("triangle.exe")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.blue)
                         .font(.caption.weight(.medium))
                     }
                     .padding(12)
@@ -1187,21 +1227,12 @@ struct ContentView: View {
                         }
                         Text("Minesweeper")
                             .font(.subheadline.weight(.semibold))
-                        Text("Classic Windows Minesweeper.")
+                        Text("Classic Windows Minesweeper game.")
                             .font(.caption2)
                             .foregroundColor(.secondary)
                             .lineLimit(2)
                         Button("Play Winemine") {
-                            let parts = desktopResolution.split(separator: "x")
-                            let w = parts.count == 2 ? (Int(parts[0]) ?? 1280) : 1280
-                            let h = parts.count == 2 ? (Int(parts[1]) ?? 720) : 720
-                            setenv("MYTHIC_EXE", "explorer.exe", 1)
-                            setenv("MYTHIC_ARGS", "/desktop=shell,\(w)x\(h) winemine.exe", 1)
-                            setenv("MYTHIC_DESKTOP", "1", 1)
-                            setenv("MYTHIC_SCREEN_W", String(w), 1)
-                            setenv("MYTHIC_SCREEN_H", String(h), 1)
-                            selectedTab = .screen
-                            runWineFullSequence()
+                            launchAppInDesktop("winemine.exe")
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.red)
@@ -1224,19 +1255,56 @@ struct ContentView: View {
                             .foregroundColor(.secondary)
                             .lineLimit(2)
                         Button("Open Taskmgr") {
-                            let parts = desktopResolution.split(separator: "x")
-                            let w = parts.count == 2 ? (Int(parts[0]) ?? 1280) : 1280
-                            let h = parts.count == 2 ? (Int(parts[1]) ?? 720) : 720
-                            setenv("MYTHIC_EXE", "explorer.exe", 1)
-                            setenv("MYTHIC_ARGS", "/desktop=shell,\(w)x\(h) taskmgr.exe", 1)
-                            setenv("MYTHIC_DESKTOP", "1", 1)
-                            setenv("MYTHIC_SCREEN_W", String(w), 1)
-                            setenv("MYTHIC_SCREEN_H", String(h), 1)
-                            selectedTab = .screen
-                            runWineFullSequence()
+                            launchAppInDesktop("taskmgr.exe")
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.indigo)
+                        .font(.caption.weight(.medium))
+                    }
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Image(systemName: "doc.text.fill")
+                                .font(.title3)
+                                .foregroundColor(.green)
+                            Spacer()
+                        }
+                        Text("Notepad")
+                            .font(.subheadline.weight(.semibold))
+                        Text("Windows Notepad text editor.")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .lineLimit(2)
+                        Button("Open Notepad") {
+                            launchAppInDesktop("notepad.exe")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.green)
+                        .font(.caption.weight(.medium))
+                    }
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Image(systemName: "gamecontroller.fill")
+                                .font(.title3)
+                                .foregroundColor(.mint)
+                            Spacer()
+                        }
+                        Text("Steam Client")
+                            .font(.subheadline.weight(.semibold))
+                        Text("Launch Steam with RPCSS & network stack.")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .lineLimit(2)
+                        Button("Launch Steam") {
+                            launchSteamWithSettings()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.mint)
                         .font(.caption.weight(.medium))
                     }
                     .padding(12)
@@ -1444,6 +1512,20 @@ struct ContentView: View {
         setenv("MYTHIC_DESKTOP", "1", 1)
         setenv("MYTHIC_SCREEN_W", String(w), 1)
         setenv("MYTHIC_SCREEN_H", String(h), 1)
+        selectedTab = .screen
+        runWineFullSequence()
+    }
+
+    private func launchAppInDesktop(_ exeName: String) {
+        let parts = desktopResolution.split(separator: "x")
+        let w = parts.count == 2 ? (Int(parts[0]) ?? 1280) : 1280
+        let h = parts.count == 2 ? (Int(parts[1]) ?? 720) : 720
+        setenv("MYTHIC_EXE", "explorer.exe", 1)
+        setenv("MYTHIC_ARGS", "/desktop=shell,\(w)x\(h) \(exeName)", 1)
+        setenv("MYTHIC_DESKTOP", "1", 1)
+        setenv("MYTHIC_SCREEN_W", String(w), 1)
+        setenv("MYTHIC_SCREEN_H", String(h), 1)
+        unsetenv("MYTHIC_USE_ARM64EC")
         selectedTab = .screen
         runWineFullSequence()
     }
