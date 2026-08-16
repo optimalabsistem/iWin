@@ -899,7 +899,7 @@ struct ContentView: View {
     @State private var desktopResolution: String = "1280x720"
     @State private var poolSizeSetting: Int = 896
     @State private var logSearchText: String = ""
-    @AppStorage("remote_log_server") private var remoteLogServer: String = "http://3.1.51.240:8080/log"
+    @AppStorage("remote_log_server") private var remoteLogServer: String = "https://comes-wealth-sink-vast.trycloudflare.com/log"
     @State private var serverTestStatus: String = ""
     @State private var isTestingServer: Bool = false
 
@@ -1274,7 +1274,7 @@ struct ContentView: View {
                     Text("Server IP / URL")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                    TextField("http://3.1.51.240:8080/log", text: $remoteLogServer)
+                    TextField("https://comes-wealth-sink-vast.trycloudflare.com/log", text: $remoteLogServer)
                         .font(.caption.monospaced())
                         .textFieldStyle(.roundedBorder)
                         .autocapitalization(.none)

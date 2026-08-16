@@ -4,7 +4,7 @@
 - **Goal**: Run x86-64 / ARM64 Windows applications and DirectX 11 Metal games on non-jailbroken iOS / iPadOS using Wine + FEX JIT + DXMT.
 - **Repository**: `https://github.com/optimalabsistem/iWin.git` (branch `main`).
 - **CI / CD**: Codemagic API (App ID: `6a8023cf319d803a9daeb3ef`, Workflow: `ios-iwin-workflow`).
-- **Live Telemetry Server**: `http://3.1.51.240:8080/log` (monitored locally via `server_logger.py` and `live_logs.txt`).
+- **Live Telemetry Server**: `https://comes-wealth-sink-vast.trycloudflare.com/log` (Cloudflare Tunnel HTTPS) & direct `http://3.1.51.240:8080/log` (monitored locally via `server_logger.py` and `live_logs.txt`).
 
 ---
 
