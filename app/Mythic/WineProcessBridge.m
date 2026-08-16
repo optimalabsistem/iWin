@@ -671,41 +671,20 @@ static void *wine_process_thread(void *arg) {
             }
         }
 
-        // Populate Windows Desktop icons and Start Menu items
+        // Ensure desktop and start menu directories are clean so Start Menu is simple and fast
         {
             NSString *prefix = [NSString stringWithUTF8String:g_prefix_path];
             NSFileManager *fm = [NSFileManager defaultManager];
-            NSArray *desktopDirs = @[
+            NSArray *cleanDirs = @[
                 [prefix stringByAppendingPathComponent:@"drive_c/users/Public/Desktop"],
                 [prefix stringByAppendingPathComponent:@"drive_c/users/admin/Desktop"],
                 [prefix stringByAppendingPathComponent:@"drive_c/ProgramData/Microsoft/Windows/Start Menu/Programs"],
                 [prefix stringByAppendingPathComponent:@"drive_c/users/admin/AppData/Roaming/Microsoft/Windows/Start Menu/Programs"]
             ];
-            
-            for (NSString *d in desktopDirs) {
+            for (NSString *d in cleanDirs) {
+                [fm removeItemAtPath:d error:nil];
                 [fm createDirectoryAtPath:d withIntermediateDirectories:YES attributes:nil error:nil];
             }
-            
-            // App Shortcuts
-            NSDictionary *apps = @{
-                @"3D Cube Test.bat": @"@echo off\r\nstart \"\" \"C:\\windows\\system32\\cube.exe\"\r\n",
-                @"3D Triangle Test.bat": @"@echo off\r\nstart \"\" \"C:\\windows\\system32\\triangle.exe\"\r\n",
-                @"File Explorer.bat": @"@echo off\r\nstart \"\" \"C:\\windows\\explorer.exe\" /e,C:\\\r\n",
-                @"Task Manager.bat": @"@echo off\r\nstart \"\" \"C:\\windows\\system32\\taskmgr.exe\"\r\n",
-                @"Command Prompt.bat": @"@echo off\r\nstart \"\" \"C:\\windows\\system32\\cmd.exe\"\r\n",
-                @"Minesweeper.bat": @"@echo off\r\nstart \"\" \"C:\\windows\\system32\\winemine.exe\"\r\n",
-                @"Notepad.bat": @"@echo off\r\nstart \"\" \"C:\\windows\\system32\\notepad.exe\"\r\n",
-                @"Wine Configuration.bat": @"@echo off\r\nstart \"\" \"C:\\windows\\system32\\winecfg.exe\"\r\n",
-                @"3D TexQuad Test.bat": @"@echo off\r\nstart \"\" \"C:\\windows\\system32\\texquad.exe\"\r\n"
-            };
-            
-            for (NSString *d in desktopDirs) {
-                for (NSString *fileName in apps) {
-                    NSString *filePath = [d stringByAppendingPathComponent:fileName];
-                    [apps[fileName] writeToFile:filePath atomically:YES encoding:NSUTF8StringEncoding error:nil];
-                }
-            }
-            dprintf(STDERR_FILENO, "[WineProc] Created %lu desktop/start-menu shortcuts in Wine prefix\n", (unsigned long)apps.count);
         }
 
         // Build the launch path for Wine's PE loader.
