@@ -1039,16 +1039,16 @@ struct ContentView: View {
     private var launcherTabView: some View {
         ScrollView {
             VStack(spacing: 16) {
-                // Card 1: Windows Desktop (With 3D Cube Included)
+                // Card 1: Windows Desktop
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Image(systemName: "display.2")
                             .font(.title2)
                             .foregroundColor(.blue)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Windows Virtual Desktop")
+                            Text("Windows Desktop")
                                 .font(.headline)
-                            Text("Launch Windows Explorer desktop with 3D Metal Cube & Window Compositor.")
+                            Text("Full Windows Explorer desktop with File Explorer, Start Menu & Desktop icons.")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
@@ -1075,7 +1075,7 @@ struct ContentView: View {
                         HStack {
                             Spacer()
                             Image(systemName: "play.fill")
-                            Text("Launch Windows Desktop (3D Test Included)")
+                            Text("Launch Windows Desktop")
                                 .fontWeight(.semibold)
                             Spacer()
                         }
@@ -1368,7 +1368,7 @@ struct ContentView: View {
         let w = parts.count == 2 ? (Int(parts[0]) ?? 1280) : 1280
         let h = parts.count == 2 ? (Int(parts[1]) ?? 720) : 720
         setenv("MYTHIC_EXE", "explorer.exe", 1)
-        setenv("MYTHIC_ARGS", "/desktop=shell,\(w)x\(h) C:\\windows\\system32\\cmd.exe /c start C:\\windows\\system32\\cube.exe", 1)
+        setenv("MYTHIC_ARGS", "/desktop=shell,\(w)x\(h)", 1)
         setenv("MYTHIC_DESKTOP", "1", 1)
         setenv("MYTHIC_SCREEN_W", String(w), 1)
         setenv("MYTHIC_SCREEN_H", String(h), 1)

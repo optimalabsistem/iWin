@@ -603,24 +603,16 @@ static void *wine_process_thread(void *arg) {
                 NSArray *others = [fm contentsOfDirectoryAtPath:otherSource error:nil];
                 int crossLinked = 0;
                 for (NSString *f in others) {
+                    // Only cross-link .exe files, NEVER cross-link mismatched architecture .dll files into system32!
+                    if (![f hasSuffix:@".exe"]) continue;
                     NSString *dst = [sys32Dir stringByAppendingPathComponent:f];
-                    // fileExistsAtPath FOLLOWS symlinks: YES means the session
-                    // (main) pass already linked this name to a resolvable
-                    // file — that arch wins, leave it.
                     if ([fm fileExistsAtPath:dst]) continue;
-                    // NO means absent OR a stale/dangling symlink left by a
-                    // previous install (bundle UUID changed on reinstall).
-                    // createSymbolicLink fails with EEXIST on a dangling link
-                    // that still occupies the path — which silently left the
-                    // -x64 files pointing at a dead bundle, so they vanished
-                    // from Wine's dir enumeration. Clear then recreate, like
-                    // the main pass does.
                     [fm removeItemAtPath:dst error:nil];
                     NSString *src = [otherSource stringByAppendingPathComponent:f];
                     if ([fm createSymbolicLinkAtPath:dst withDestinationPath:src error:nil])
                         crossLinked++;
                 }
-                dprintf(STDERR_FILENO, "[WineProc] Cross-linked %d non-colliding files from %s -> sys32\n",
+                dprintf(STDERR_FILENO, "[WineProc] Cross-linked %d non-colliding exes from %s -> sys32\n",
                         crossLinked, other_subdir);
             }
 
@@ -655,51 +647,15 @@ static void *wine_process_thread(void *arg) {
                 }
             }
 
-            // Layer Microsoft's real VC++ Runtime DLLs ON TOP of the ARM64EC
-            // bundle (only for x86_64 guests). These overwrite Wine's stub
-            // builtins — Wine then loads the real MS x86_64 implementation
-            // (via FEX) instead of its partial ARM64EC reimplementation.
-            //
-            // Same pattern Proton/Winlator use: drop in the real concrt140 /
-            // msvcp140 / vcruntime140 binaries from VC_redist.x64.exe so games
-            // that exercise the full C++ runtime (parallel_for, atomic_wait,
-            // <filesystem>, etc.) don't trip __wine_unimplemented stubs.
             if (use_arm64ec) {
                 NSString *vcrtSource = [bundlePath stringByAppendingPathComponent:@"x86_64-vcruntime"];
                 NSArray *vcrtDlls = [fm contentsOfDirectoryAtPath:vcrtSource error:nil];
                 int vcrtLinked = 0, vcrtSkipped = 0;
                 for (NSString *dll in vcrtDlls) {
-                    /* NOTE 2026-07-03 (late): retried lifting BOTH exemptions
-                     * below after the fast-write bisect, hoping trap-mode had
-                     * fixed the corruption class (and to keep hot CRT calls
-                     * like memcpy inside the JIT — they cost a full x64→EC
-                     * round trip as ARM64EC builtins, a large share of the
-                     * 57ms menu frame). Result: guest RIP jumped to junk
-                     * (0x600000010xx, lr=0xa59696ff...) right after
-                     * MSVCP140/VCRUNTIME140 loaded x86_64, before present #1.
-                     * So the x86→EC SEH/transition corruption is NOT the
-                     * fast-write bug — it's still unfixed, and these
-                     * exemptions must stay until it is. */
-                    /* Keep vcruntime140.dll as the ARM64EC builtin: its
-                     * __C_specific_handler is invoked by Wine's SEH dispatch,
-                     * and routing that through FEX corrupts x86 RSP (SEH
-                     * dispatcher's exit-thunk arg setup is broken). With the
-                     * native arm64ec vcruntime140, Wine calls the handler
-                     * directly in ARM64 — no FEX bridging on the exception
-                     * path. Other vcruntime/msvcp/concrt DLLs still overlay. */
                     if ([[dll lowercaseString] isEqualToString:@"vcruntime140.dll"]) {
                         vcrtSkipped++;
                         continue;
                     }
-                    /* msvcp140.dll: same exemption as vcruntime140, found
-                     * 2026-07-03. The MS x86_64 msvcp140 throws a C++
-                     * exception during its own DllMain; the x86 throw-record
-                     * builder calls RtlPcToFileHeader cross-arch and the
-                     * exception-path exit thunk corrupts guest RSP — the
-                     * returned module base lands in the return-address slot
-                     * and RIP jumps to the MZ header (NoExec loop, no
-                     * splash). Keep the ARM64EC builtin so msvcp140's EH
-                     * runs natively, like vcruntime140. */
                     if ([[dll lowercaseString] isEqualToString:@"msvcp140.dll"]) {
                         vcrtSkipped++;
                         continue;
@@ -715,7 +671,7 @@ static void *wine_process_thread(void *arg) {
             }
         }
 
-        // Populate Windows Desktop icons, Start Menu items, and AutoStart scripts
+        // Populate Windows Desktop icons and Start Menu items
         {
             NSString *prefix = [NSString stringWithUTF8String:g_prefix_path];
             NSFileManager *fm = [NSFileManager defaultManager];
@@ -729,14 +685,6 @@ static void *wine_process_thread(void *arg) {
             for (NSString *d in desktopDirs) {
                 [fm createDirectoryAtPath:d withIntermediateDirectories:YES attributes:nil error:nil];
             }
-            
-            NSString *startupDir = [prefix stringByAppendingPathComponent:@"drive_c/ProgramData/Microsoft/Windows/Start Menu/Programs/StartUp"];
-            [fm createDirectoryAtPath:startupDir withIntermediateDirectories:YES attributes:nil error:nil];
-            
-            // AutoStart 3D Cube on Desktop Boot
-            NSString *autoStartScript = @"@echo off\r\nstart \"\" \"C:\\windows\\system32\\cube.exe\"\r\n";
-            [autoStartScript writeToFile:[startupDir stringByAppendingPathComponent:@"01_AutoStart_3D_Cube.bat"]
-                              atomically:YES encoding:NSUTF8StringEncoding error:nil];
             
             // App Shortcuts
             NSDictionary *apps = @{
