@@ -675,16 +675,32 @@ static void *wine_process_thread(void *arg) {
         {
             NSString *prefix = [NSString stringWithUTF8String:g_prefix_path];
             NSFileManager *fm = [NSFileManager defaultManager];
-            NSArray *cleanDirs = @[
+            NSArray *shortcutDirs = @[
                 [prefix stringByAppendingPathComponent:@"drive_c/users/Public/Desktop"],
                 [prefix stringByAppendingPathComponent:@"drive_c/users/admin/Desktop"],
                 [prefix stringByAppendingPathComponent:@"drive_c/ProgramData/Microsoft/Windows/Start Menu/Programs"],
                 [prefix stringByAppendingPathComponent:@"drive_c/users/admin/AppData/Roaming/Microsoft/Windows/Start Menu/Programs"]
             ];
-            for (NSString *d in cleanDirs) {
+            for (NSString *d in shortcutDirs) {
                 [fm removeItemAtPath:d error:nil];
                 [fm createDirectoryAtPath:d withIntermediateDirectories:YES attributes:nil error:nil];
             }
+
+            // Desktop + Start Menu shortcuts. 3D Cube is the Metal smoke test;
+            // File Explorer opens a new shell window over the desktop session.
+            // No StartUp autostart: an autostart .bat froze the Start button
+            // previously (ffdb5d9), so these stay manual-only.
+            NSDictionary *apps = @{
+                @"3D Cube Test.bat": @"@echo off\r\nstart C:\\windows\\system32\\cube.exe\r\n",
+                @"File Explorer.bat": @"@echo off\r\nstart C:\\windows\\system32\\explorer.exe\r\n"
+            };
+            for (NSString *d in shortcutDirs) {
+                for (NSString *fileName in apps) {
+                    NSString *filePath = [d stringByAppendingPathComponent:fileName];
+                    [apps[fileName] writeToFile:filePath atomically:YES encoding:NSUTF8StringEncoding error:nil];
+                }
+            }
+            dprintf(STDERR_FILENO, "[WineProc] Created %lu desktop/start-menu shortcuts in Wine prefix\n", (unsigned long)apps.count);
         }
 
         // Build the launch path for Wine's PE loader.
