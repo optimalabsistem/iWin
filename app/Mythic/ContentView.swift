@@ -182,14 +182,15 @@ final class MetalBackedView: UIView {
         }
     }
 
-    // Map touch point in view-local UI points to the 1024×768 logical
-    // surface DXMT swapchains use, then post to winios.drv. Coordinates
-    // are relative to the aspect-fit gameRect (letterbox borders clamp).
+    // Map touch point in view-local UI points to the logical surface
+    // dimensions used by the running desktop/game session.
     private func mapTouch(_ touch: UITouch) -> (Int32, Int32) {
         let p = touch.location(in: self)
         let r = gameRect()
-        let x = Int32(min(max((p.x - r.minX) * 1024 / r.width, 0), 1023))
-        let y = Int32(min(max((p.y - r.minY) * 768 / r.height, 0), 767))
+        let screenW = CGFloat(envInt("MYTHIC_SCREEN_W", 1280))
+        let screenH = CGFloat(envInt("MYTHIC_SCREEN_H", 720))
+        let x = Int32(min(max((p.x - r.minX) * screenW / max(r.width, 1), 0), screenW - 1))
+        let y = Int32(min(max((p.y - r.minY) * screenH / max(r.height, 1), 0), screenH - 1))
         return (x, y)
     }
 
@@ -425,7 +426,14 @@ final class MetalBackedView: UIView {
         // ml643: NOT in relative mode — every small aim adjustment would fire the
         // weapon. Left/right click are on-screen buttons there instead.
         if !movedBeyondSlop && now - touchStartTime < 0.5 && !InputSettings.shared.relative {
-            fputs("[trackpad] ended: click\n", stderr)
+            // Direct Touch / Tap: Warp cursor directly to tapped screen coordinates and click!
+            if let t = touches.first {
+                let (tx, ty) = mapTouch(t)
+                Self.cursor.x = CGFloat(tx)
+                Self.cursor.y = CGFloat(ty)
+                postPointer(F_MOVE | F_ABS)
+            }
+            fputs("[trackpad] ended: click at mapped touch\n", stderr)
             postPointer(F_LDOWN)
             postPointer(F_LUP)
         }
