@@ -984,56 +984,6 @@ struct ContentView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 4)
 
-            // Quick App Launch Bar
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    Button("🎲 3D Cube") {
-                        launchAppInDesktop("cube.exe")
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(.orange)
-
-                    Button("🔺 3D Triangle") {
-                        launchAppInDesktop("triangle.exe")
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(.blue)
-
-                    Button("🖼️ TexQuad 3D") {
-                        launchAppInDesktop("texquad.exe")
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(.teal)
-
-                    Button("🚩 Minesweeper") {
-                        launchAppInDesktop("winemine.exe")
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(.red)
-
-                    Button("📊 Taskmgr") {
-                        launchAppInDesktop("taskmgr.exe")
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(.indigo)
-
-                    Button("📝 Notepad") {
-                        launchAppInDesktop("notepad.exe")
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(.green)
-
-                    Button("⚙️ Winecfg") {
-                        launchAppInDesktop("winecfg.exe")
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(.gray)
-                }
-                .font(.caption.weight(.medium))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 2)
-            }
-
             ZStack {
                 Color.black
                 MythicMetalView()
@@ -1089,7 +1039,106 @@ struct ContentView: View {
     private var launcherTabView: some View {
         ScrollView {
             VStack(spacing: 16) {
-                // Card 1: Run Custom .EXE from Files
+                // Card 1: Windows Desktop (With 3D Cube Included)
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "display.2")
+                            .font(.title2)
+                            .foregroundColor(.blue)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Windows Virtual Desktop")
+                                .font(.headline)
+                            Text("Launch Windows Explorer desktop with 3D Metal Cube & Window Compositor.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                    }
+
+                    HStack {
+                        Text("Desktop Resolution:")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Picker("", selection: $desktopResolution) {
+                            Text("1920x1080 (1080p)").tag("1920x1080")
+                            Text("1280x720 (720p)").tag("1280x720")
+                            Text("1024x768 (4:3)").tag("1024x768")
+                            Text("960x540 (Default)").tag("960x540")
+                        }
+                        .pickerStyle(.menu)
+                    }
+
+                    Button {
+                        launchConfiguredDesktop()
+                    } label: {
+                        HStack {
+                            Spacer()
+                            Image(systemName: "play.fill")
+                            Text("Launch Windows Desktop (3D Test Included)")
+                                .fontWeight(.semibold)
+                            Spacer()
+                        }
+                        .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.blue)
+                }
+                .padding(16)
+                .background(RoundedRectangle(cornerRadius: 14).fill(Color(UIColor.secondarySystemBackground)))
+
+                // Card 2: Standalone 3D Metal Test
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "cube.transparent.fill")
+                            .font(.title2)
+                            .foregroundColor(.orange)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Direct 3D Metal Tests")
+                                .font(.headline)
+                            Text("Direct DirectX 11 Metal hardware rendering test with real-time FPS.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                    }
+
+                    HStack(spacing: 12) {
+                        Button {
+                            launchStandalone3DTest("cube.exe")
+                        } label: {
+                            HStack {
+                                Spacer()
+                                Image(systemName: "cube.fill")
+                                Text("3D Cube")
+                                    .fontWeight(.semibold)
+                                Spacer()
+                            }
+                            .padding(.vertical, 10)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.orange)
+
+                        Button {
+                            launchStandalone3DTest("triangle.exe")
+                        } label: {
+                            HStack {
+                                Spacer()
+                                Image(systemName: "triangle.fill")
+                                Text("3D Triangle")
+                                    .fontWeight(.semibold)
+                                Spacer()
+                            }
+                            .padding(.vertical, 10)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.indigo)
+                    }
+                }
+                .padding(16)
+                .background(RoundedRectangle(cornerRadius: 14).fill(Color(UIColor.secondarySystemBackground)))
+
+                // Card 3: Run Custom .EXE from Files
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Image(systemName: "folder.badge.plus")
@@ -1121,195 +1170,6 @@ struct ContentView: View {
                 }
                 .padding(16)
                 .background(RoundedRectangle(cornerRadius: 14).fill(Color(UIColor.secondarySystemBackground)))
-
-                // Card 2: Windows Virtual Desktop
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Image(systemName: "display.2")
-                            .font(.title2)
-                            .foregroundColor(.blue)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Windows Virtual Desktop")
-                                .font(.headline)
-                            Text("Start Windows Explorer desktop with window management and RPCSS services.")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        Spacer()
-                    }
-
-                    HStack {
-                        Text("Screen Resolution:")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Spacer()
-                        Picker("", selection: $desktopResolution) {
-                            Text("1920x1080 (1080p)").tag("1920x1080")
-                            Text("1280x720 (720p)").tag("1280x720")
-                            Text("1024x768 (4:3)").tag("1024x768")
-                            Text("960x540 (Default)").tag("960x540")
-                        }
-                        .pickerStyle(.menu)
-                    }
-
-                    Button {
-                        launchConfiguredDesktop()
-                    } label: {
-                        HStack {
-                            Spacer()
-                            Image(systemName: "play.fill")
-                            Text("Launch Windows Desktop")
-                                .fontWeight(.semibold)
-                            Spacer()
-                        }
-                        .padding(.vertical, 10)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.blue)
-                }
-                .padding(16)
-                .background(RoundedRectangle(cornerRadius: 14).fill(Color(UIColor.secondarySystemBackground)))
-
-                // Card Grid: 3D Benchmark & Windows Utilities
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Image(systemName: "cube.transparent.fill")
-                                .font(.title3)
-                                .foregroundColor(.orange)
-                            Spacer()
-                        }
-                        Text("3D Metal Cube")
-                            .font(.subheadline.weight(.semibold))
-                        Text("DirectX 11 Metal 3D Spinning Cube with real-time FPS.")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                            .lineLimit(2)
-                        Button("Run 3D Cube") {
-                            launchAppInDesktop("cube.exe")
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.orange)
-                        .font(.caption.weight(.medium))
-                    }
-                    .padding(12)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Image(systemName: "triangle.fill")
-                                .font(.title3)
-                                .foregroundColor(.blue)
-                            Spacer()
-                        }
-                        Text("3D Metal Triangle")
-                            .font(.subheadline.weight(.semibold))
-                        Text("DirectX 11 Metal RGB Triangle render benchmark.")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                            .lineLimit(2)
-                        Button("Run Triangle") {
-                            launchAppInDesktop("triangle.exe")
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.blue)
-                        .font(.caption.weight(.medium))
-                    }
-                    .padding(12)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Image(systemName: "flag.fill")
-                                .font(.title3)
-                                .foregroundColor(.red)
-                            Spacer()
-                        }
-                        Text("Minesweeper")
-                            .font(.subheadline.weight(.semibold))
-                        Text("Classic Windows Minesweeper game.")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                            .lineLimit(2)
-                        Button("Play Winemine") {
-                            launchAppInDesktop("winemine.exe")
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.red)
-                        .font(.caption.weight(.medium))
-                    }
-                    .padding(12)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Image(systemName: "chart.bar.xaxis")
-                                .font(.title3)
-                                .foregroundColor(.indigo)
-                            Spacer()
-                        }
-                        Text("Task Manager")
-                            .font(.subheadline.weight(.semibold))
-                        Text("Windows Task Manager & process monitor.")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                            .lineLimit(2)
-                        Button("Open Taskmgr") {
-                            launchAppInDesktop("taskmgr.exe")
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.indigo)
-                        .font(.caption.weight(.medium))
-                    }
-                    .padding(12)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Image(systemName: "doc.text.fill")
-                                .font(.title3)
-                                .foregroundColor(.green)
-                            Spacer()
-                        }
-                        Text("Notepad")
-                            .font(.subheadline.weight(.semibold))
-                        Text("Windows Notepad text editor.")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                            .lineLimit(2)
-                        Button("Open Notepad") {
-                            launchAppInDesktop("notepad.exe")
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.green)
-                        .font(.caption.weight(.medium))
-                    }
-                    .padding(12)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Image(systemName: "gamecontroller.fill")
-                                .font(.title3)
-                                .foregroundColor(.mint)
-                            Spacer()
-                        }
-                        Text("Steam Client")
-                            .font(.subheadline.weight(.semibold))
-                        Text("Launch Steam with RPCSS & network stack.")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                            .lineLimit(2)
-                        Button("Launch Steam") {
-                            launchSteamWithSettings()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.mint)
-                        .font(.caption.weight(.medium))
-                    }
-                    .padding(12)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
-                }
             }
             .padding(16)
         }
@@ -1508,10 +1368,20 @@ struct ContentView: View {
         let w = parts.count == 2 ? (Int(parts[0]) ?? 1280) : 1280
         let h = parts.count == 2 ? (Int(parts[1]) ?? 720) : 720
         setenv("MYTHIC_EXE", "explorer.exe", 1)
-        setenv("MYTHIC_ARGS", "/desktop=shell,\(w)x\(h) C:\\windows\\system32\\services.exe", 1)
+        setenv("MYTHIC_ARGS", "/desktop=shell,\(w)x\(h) cube.exe", 1)
         setenv("MYTHIC_DESKTOP", "1", 1)
         setenv("MYTHIC_SCREEN_W", String(w), 1)
         setenv("MYTHIC_SCREEN_H", String(h), 1)
+        unsetenv("MYTHIC_USE_ARM64EC")
+        selectedTab = .screen
+        runWineFullSequence()
+    }
+
+    private func launchStandalone3DTest(_ exeName: String = "cube.exe") {
+        setenv("MYTHIC_EXE", exeName, 1)
+        unsetenv("MYTHIC_ARGS")
+        unsetenv("MYTHIC_DESKTOP")
+        unsetenv("MYTHIC_USE_ARM64EC")
         selectedTab = .screen
         runWineFullSequence()
     }
