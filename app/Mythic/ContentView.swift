@@ -1083,6 +1083,50 @@ struct ContentView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.blue)
+
+                    HStack(spacing: 10) {
+                        Button {
+                            launchAppInDesktop("C:\\windows\\explorer.exe /e,C:\\")
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "folder.fill")
+                                Text("File Explorer")
+                                    .font(.subheadline.weight(.semibold))
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.blue)
+
+                        Button {
+                            launchAppInDesktop("C:\\windows\\system32\\taskmgr.exe")
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "chart.bar.xaxis")
+                                Text("Task Manager")
+                                    .font(.subheadline.weight(.semibold))
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.secondary)
+
+                        Button {
+                            launchAppInDesktop("C:\\windows\\system32\\winecfg.exe")
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "gearshape.fill")
+                                Text("Wine Config")
+                                    .font(.subheadline.weight(.semibold))
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.secondary)
+                    }
                 }
                 .padding(16)
                 .background(RoundedRectangle(cornerRadius: 14).fill(Color(UIColor.secondarySystemBackground)))
@@ -1091,8 +1135,8 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Image(systemName: "cube.transparent.fill")
-                            .font(.title2)
-                            .foregroundColor(.orange)
+                        .font(.title2)
+                        .foregroundColor(.orange)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Direct 3D Metal Tests")
                                 .font(.headline)
@@ -1103,18 +1147,17 @@ struct ContentView: View {
                         Spacer()
                     }
 
-                    HStack(spacing: 12) {
+                    HStack(spacing: 10) {
                         Button {
                             launchStandalone3DTest("cube.exe")
                         } label: {
-                            HStack {
-                                Spacer()
+                            HStack(spacing: 4) {
                                 Image(systemName: "cube.fill")
                                 Text("3D Cube")
-                                    .fontWeight(.semibold)
-                                Spacer()
+                                    .font(.subheadline.weight(.semibold))
                             }
-                            .padding(.vertical, 10)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.orange)
@@ -1122,17 +1165,30 @@ struct ContentView: View {
                         Button {
                             launchStandalone3DTest("triangle.exe")
                         } label: {
-                            HStack {
-                                Spacer()
+                            HStack(spacing: 4) {
                                 Image(systemName: "triangle.fill")
                                 Text("3D Triangle")
-                                    .fontWeight(.semibold)
-                                Spacer()
+                                    .font(.subheadline.weight(.semibold))
                             }
-                            .padding(.vertical, 10)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.indigo)
+
+                        Button {
+                            launchStandalone3DTest("texquad.exe")
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "square.stack.3d.down.right.fill")
+                                Text("3D TexQuad")
+                                    .font(.subheadline.weight(.semibold))
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.teal)
                     }
                 }
                 .padding(16)
