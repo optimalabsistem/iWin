@@ -3388,7 +3388,7 @@ static void *ios_mach_exception_thread( void *arg )
 skip_reclaim_band: ;
             }
 
-            if (!handled && (uintptr_t)fault_pc >= 0x100000000ULL && (uintptr_t)fault_addr >= 0x100000000ULL)
+            if (!handled && (uintptr_t)__darwin_arm_thread_state64_get_pc(state) >= 0x100000000ULL && (uintptr_t)fault_addr >= 0x100000000ULL)
             {
                 mach_vm_address_t na = (mach_vm_address_t)fault_addr;
                 mach_vm_size_t ns = 0;
