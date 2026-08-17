@@ -3388,29 +3388,15 @@ static void *ios_mach_exception_thread( void *arg )
 skip_reclaim_band: ;
             }
 
-            if (!handled && (uintptr_t)__darwin_arm_thread_state64_get_pc(state) >= 0x100000000ULL && (uintptr_t)fault_addr >= 0x100000000ULL)
+            if (!handled && (uintptr_t)fault_addr >= 0x100000000ULL)
             {
-                mach_vm_address_t na = (mach_vm_address_t)fault_addr;
-                mach_vm_size_t ns = 0;
-                vm_region_basic_info_data_64_t ni;
-                mach_msg_type_number_t nc = VM_REGION_BASIC_INFO_COUNT_64;
-                mach_port_t no = MACH_PORT_NULL;
-                if (mach_vm_region(mach_task_self(), &na, &ns, VM_REGION_BASIC_INFO_64,
-                                   (vm_region_info_t)&ni, &nc, &no) == KERN_SUCCESS)
+                mach_vm_address_t page_addr = (mach_vm_address_t)fault_addr & ~0x3fffULL;
+                if (mach_vm_protect(mach_task_self(), page_addr, 0x4000, FALSE, VM_PROT_READ | VM_PROT_WRITE) == KERN_SUCCESS)
                 {
-                    if (na <= (mach_vm_address_t)fault_addr && (mach_vm_address_t)fault_addr < na + ns)
-                    {
-                        if (ni.protection == 0 || !(ni.protection & VM_PROT_WRITE))
-                        {
-                            if (mach_vm_protect(mach_task_self(), na, ns, FALSE, VM_PROT_READ | VM_PROT_WRITE) == KERN_SUCCESS)
-                            {
-                                dprintf(STDERR_FILENO,
-                                    "[mach-heal-page] Restored RW to region 0x%llx+0x%llx for fault at 0x%llx (was prot=%d)\n",
-                                    (unsigned long long)na, (unsigned long long)ns, (unsigned long long)fault_addr, ni.protection);
-                                handled = 1;
-                            }
-                        }
-                    }
+                    dprintf(STDERR_FILENO,
+                        "[mach-heal-page] Restored RW to 16KB page 0x%llx for fault at 0x%llx\n",
+                        (unsigned long long)page_addr, (unsigned long long)fault_addr);
+                    handled = 1;
                 }
             }
 
@@ -9516,16 +9502,16 @@ static void bus_handler( int signal, siginfo_t *siginfo, void *sigcontext )
                     {
                         enum { WR_HPAGE = 0x4000 };
                         char *hp = (char *)((uintptr_t)siginfo->si_addr & ~(uintptr_t)(WR_HPAGE - 1));
-                        if (!mprotect( hp, WR_HPAGE, want ))
+                        if (mach_vm_protect( mach_task_self(), (mach_vm_address_t)hp, WR_HPAGE, FALSE, VM_PROT_READ | VM_PROT_WRITE ) == KERN_SUCCESS)
                         {
                             ++wr_healed;
-                            ERR("[wr-strip] restored prot=%d on %p — resuming "
-                                "(healed=%lu) rev=ml552\n", want, hp, wr_healed);
+                            ERR("[wr-strip] restored RW on %p — resuming "
+                                "(healed=%lu) rev=ml552\n", hp, wr_healed);
                             ios_fixup_x18_for_return( bus_ctx );
                             return;
                         }
-                        ERR("[wr-strip] mprotect(%p, %d) FAILED errno=%d — falling to AV rev=ml552\n",
-                            (void *)hp, want, errno);
+                        ERR("[wr-strip] mach_vm_protect(%p) FAILED — falling to AV rev=ml552\n",
+                            (void *)hp);
                     }
                 }
             }
@@ -9550,23 +9536,15 @@ static void bus_handler( int signal, siginfo_t *siginfo, void *sigcontext )
                          * Mach FUNCTION, not a size (see the ml-era note above) */
                         enum { BUS_HPAGE = 0x4000 };
                         char *hpage = (char *)((uintptr_t)siginfo->si_addr & ~(uintptr_t)(BUS_HPAGE - 1));
-                        if (!mprotect( hpage, BUS_HPAGE, want ))
+                        if (mach_vm_protect( mach_task_self(), (mach_vm_address_t)hpage, BUS_HPAGE, FALSE, VM_PROT_READ | VM_PROT_WRITE ) == KERN_SUCCESS)
                         {
-                            /* ml560: the old text asserted "host had stripped it".
-                             * ml559 disproved that for the fatal case: the same fault
-                             * reported entryprot=3 nowprot=3 — protection was never
-                             * stripped, the page simply could not be materialised
-                             * (kr=10). Say what is actually known: the read probe
-                             * failed and we re-applied wine's intended protection. */
-                            ERR("[bus-reheal] #%d re-applied prot=%d on %p (read probe FAILED; "
-                                "wine says committed+readable — NOT verified as a protection "
-                                "strip, see [bus-rgn] OWNER/VERDICT) — resuming rev=ml560\n",
-                                rehealed, want, hpage);
+                            ERR("[bus-reheal] #%d re-applied RW on %p — resuming rev=ml560\n",
+                                rehealed, hpage);
                             ios_fixup_x18_for_return( bus_ctx );
                             return;
                         }
-                        ERR("[bus-reheal] #%d mprotect(%p, want=%d) FAILED errno=%d — falling to AV\n",
-                            rehealed, (void *)hpage, want, errno);
+                        ERR("[bus-reheal] #%d mach_vm_protect(%p) FAILED — falling to AV\n",
+                            rehealed, (void *)hpage);
                     }
                 }
                 /* unreadable target = an access violation, NOT misalignment.
