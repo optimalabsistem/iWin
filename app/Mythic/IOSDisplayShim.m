@@ -88,9 +88,8 @@ extern CAMetalLayer *winios_metal_layer_for_hwnd(void *hwnd);
 
 static macdrv_metal_device my_create_metal_device(void) {
     id<MTLDevice> dev = MTLCreateSystemDefaultDevice();
-    fprintf(stderr, "[mythic-display] create_metal_device -> %p (name: %s)\n",
+    dprintf(STDERR_FILENO, "[mythic-display] create_metal_device -> %p (name: %s)\n",
             (__bridge void *)dev, dev ? [[dev name] UTF8String] : "NULL");
-    fflush(stderr);
     return (macdrv_metal_device)CFBridgingRetain(dev);
 }
 
@@ -105,33 +104,28 @@ static void my_release_metal_device(macdrv_metal_device d) {
 // (see my_get_win_data). Desktop mode: per-window layer in the desktop
 // compositor. Game mode: the fullscreen singleton, exactly as before.
 static macdrv_metal_view my_view_create_metal_view(macdrv_view v, macdrv_metal_device d) {
-    fprintf(stderr, "[mythic-display] view_create_metal_view requested for hwnd=%p device=%p (desktop=%d)\n",
+    dprintf(STDERR_FILENO, "[mythic-display] view_create_metal_view requested for hwnd=%p device=%p (desktop=%d)\n",
             (void *)v, (void *)d, mythic_desktop_mode());
-    fflush(stderr);
     if (mythic_desktop_mode()) {
         CAMetalLayer *layer = winios_metal_layer_for_hwnd((void *)v);
         if (layer) {
-            fprintf(stderr, "[mythic-display] desktop metal view for hwnd=%p layer=%p frame={%.0f,%.0f,%.0f,%.0f} drawableSize={%.0f,%.0f}\n",
+            dprintf(STDERR_FILENO, "[mythic-display] desktop metal view for hwnd=%p layer=%p frame={%.0f,%.0f,%.0f,%.0f} drawableSize={%.0f,%.0f}\n",
                     (void *)v, layer, layer.frame.origin.x, layer.frame.origin.y, layer.frame.size.width, layer.frame.size.height,
                     layer.drawableSize.width, layer.drawableSize.height);
-            fflush(stderr);
             return (macdrv_metal_view)CFBridgingRetain(layer);
         }
-        fprintf(stderr, "[mythic-display] desktop metal layer not found for hwnd=%p, falling back to main layer\n", (void *)v);
-        fflush(stderr);
+        dprintf(STDERR_FILENO, "[mythic-display] desktop metal layer not found for hwnd=%p, falling back to main layer\n", (void *)v);
     }
     pthread_mutex_lock(&g_lock);
     CAMetalLayer *layer = g_layer;
     pthread_mutex_unlock(&g_lock);
     if (!layer) {
-        fprintf(stderr, "[mythic-display] ERROR: view_create_metal_view called but g_layer is NULL!\n");
-        fflush(stderr);
+        dprintf(STDERR_FILENO, "[mythic-display] ERROR: view_create_metal_view called but g_layer is NULL!\n");
         return NULL;
     }
-    fprintf(stderr, "[mythic-display] standalone fullscreen metal view returned layer=%p frame={%.0f,%.0f,%.0f,%.0f} drawableSize={%.0f,%.0f}\n",
+    dprintf(STDERR_FILENO, "[mythic-display] standalone fullscreen metal view returned layer=%p frame={%.0f,%.0f,%.0f,%.0f} drawableSize={%.0f,%.0f}\n",
             layer, layer.frame.origin.x, layer.frame.origin.y, layer.frame.size.width, layer.frame.size.height,
             layer.drawableSize.width, layer.drawableSize.height);
-    fflush(stderr);
     return (macdrv_metal_view)CFBridgingRetain(layer);
 }
 

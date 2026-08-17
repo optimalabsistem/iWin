@@ -5497,50 +5497,47 @@ static NTSTATUS load_builtin_unixlib( void *module, BOOL wow, const void **funcs
         const char *up = NULL;
         if ((builtin = get_builtin_module( module ))) up = builtin->unix_path;
         const char *match = up ? up : modname;
-        if (match && strstr(match, "winemetal")) {
+        if (match && strcasestr(match, "winemetal")) {
             *funcs = (const void *)dxmt_winemetal_unix_call_funcs;
-            WARN_(module)("iOS: module %p (%s) -> dxmt_winemetal_unix_call_funcs (%p)\n",
-                          module, match, dxmt_winemetal_unix_call_funcs);
+            dprintf(2, "[unixlib] module %p (%s) -> dxmt_winemetal_unix_call_funcs (%p)\n",
+                    module, match, dxmt_winemetal_unix_call_funcs);
             status = STATUS_SUCCESS;
-        } else if (match && (strstr(match, "wineios.drv") || strstr(match, "winecoreaudio") || strstr(match, "winealsa") || strstr(match, "winepulse"))) {
+        } else if (match && (strcasestr(match, "wineios") || strcasestr(match, "winecoreaudio") || strcasestr(match, "winealsa") || strcasestr(match, "winepulse"))) {
             *funcs = (const void *)audio_null_ios_unix_call_funcs;
-            ERR("iOS: module %p (%s) -> audio_null_ios_unix_call_funcs (%p)\n",
-                module, match, audio_null_ios_unix_call_funcs);
+            dprintf(2, "[unixlib] module %p (%s) -> audio_null_ios_unix_call_funcs (%p)\n",
+                    module, match, audio_null_ios_unix_call_funcs);
             status = STATUS_SUCCESS;
-        } else if (match && strstr(match, "ws2_32")) {
+        } else if (match && strcasestr(match, "ws2_32")) {
             *funcs = (const void *)ws2_32_unix_call_funcs;
             dprintf(2, "[unixlib] module %p (%s) -> ws2_32_unix_call_funcs (%p)\n",
                 module, match, (void *)ws2_32_unix_call_funcs);
             status = STATUS_SUCCESS;
-        } else if (match && strstr(match, "bcrypt")) {
+        } else if (match && strcasestr(match, "bcrypt")) {
             *funcs = (const void *)bcrypt_unix_call_funcs;
             dprintf(2, "[unixlib] module %p (%s) -> bcrypt_unix_call_funcs (%p)\n",
                 module, match, (void *)bcrypt_unix_call_funcs);
             status = STATUS_SUCCESS;
-        } else if (match && strstr(match, "secur32")) {
+        } else if (match && strcasestr(match, "secur32")) {
             *funcs = (const void *)secur32_unix_call_funcs;
             dprintf(2, "[unixlib] module %p (%s) -> secur32_unix_call_funcs (%p)\n",
                 module, match, (void *)secur32_unix_call_funcs);
             status = STATUS_SUCCESS;
-        } else if (match && strstr(match, "crypt32")) {
+        } else if (match && strcasestr(match, "crypt32")) {
             *funcs = (const void *)crypt32_unix_call_funcs;
             dprintf(2, "[unixlib] module %p (%s) -> crypt32_unix_call_funcs (%p)\n",
                 module, match, (void *)crypt32_unix_call_funcs);
             status = STATUS_SUCCESS;
-        } else if (match && (strstr(match, "dwrite") || strstr(match, "DWrite"))) {
-            /* case-insensitive on purpose: the PE export name is "DWrite.dll"
-             * while the unix_path is "dwrite.so" — matching only one spelling
-             * would silently leave the text stack dead again. */
+        } else if (match && strcasestr(match, "dwrite")) {
             *funcs = (const void *)dwrite_unix_call_funcs;
             dprintf(2, "[unixlib] module %p (%s) -> dwrite_unix_call_funcs (%p) rev=ml494\n",
                 module, match, (void *)dwrite_unix_call_funcs);
             status = STATUS_SUCCESS;
-        } else if (match && strstr(match, "nsi.dll")) {
+        } else if (match && strcasestr(match, "nsi")) {
             *funcs = (const void *)nsi_unix_call_funcs;
             dprintf(2, "[unixlib] module %p (%s) -> nsi_unix_call_funcs (%p) rev=ml472\n",
                 module, match, (void *)nsi_unix_call_funcs);
             status = STATUS_SUCCESS;
-        } else if (match && strstr(match, "win32u")) {
+        } else if (match && strcasestr(match, "win32u")) {
             /* Register win32u's NtUser / NtGdi syscall table in slot 1.
              * Activating this causes user32 process_attach to crash until
              * wineserver shared-memory bringup is complete; gated on the
