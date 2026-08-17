@@ -597,6 +597,14 @@ static void *wine_process_thread(void *arg) {
             LOG("Symlinked %d DLLs from %{public}s to %{public}s", linked, bundle_subdir, sys32Dir.UTF8String);
             dprintf(STDERR_FILENO, "[WineProc] Symlinked %d DLLs from %s -> sys32\n", linked, bundle_subdir);
 
+            // Also symlink shader_cube.hlsl to drive_c root for direct execution
+            NSString *driveCDir = [prefix stringByAppendingPathComponent:@"drive_c"];
+            NSString *shaderSrc = [dllSource stringByAppendingPathComponent:@"shader_cube.hlsl"];
+            if ([fm fileExistsAtPath:shaderSrc]) {
+                [fm removeItemAtPath:[driveCDir stringByAppendingPathComponent:@"shader_cube.hlsl"] error:nil];
+                [fm createSymbolicLinkAtPath:[driveCDir stringByAppendingPathComponent:@"shader_cube.hlsl"] withDestinationPath:shaderSrc error:nil];
+            }
+
             // X3 mixed-mode: also link NON-COLLIDING files from the other
             // bundle arch so cross-arch child exes resolve by Win32 path
             // (e.g. proc-test-x64.exe in an aarch64 desktop session).

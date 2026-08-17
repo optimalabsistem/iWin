@@ -99,8 +99,18 @@ int main(int argc, char **argv) {
     const float clear[] = { 0.1f, 0.15f, 0.2f, 1.0f };  // dark slate background
     UINT stride = sizeof(struct Vertex), offset = 0;
 
-    fprintf(stderr, "[triangle] entering render loop\n");
-    for (int f = 0; f < 180; f++) {
+    fprintf(stderr, "[triangle] entering continuous render loop\n");
+    MSG msg;
+    BOOL running = TRUE;
+    int f = 0;
+    while (running) {
+        while (PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT) { running = FALSE; break; }
+            TranslateMessage(&msg);
+            DispatchMessageA(&msg);
+        }
+        if (!running) break;
+
         ctx->lpVtbl->ClearRenderTargetView(ctx, rtv, clear);
         ctx->lpVtbl->OMSetRenderTargets(ctx, 1, &rtv, NULL);
         ctx->lpVtbl->RSSetViewports(ctx, 1, &vp);
@@ -111,6 +121,11 @@ int main(int argc, char **argv) {
         ctx->lpVtbl->PSSetShader(ctx, ps, NULL, 0);
         ctx->lpVtbl->Draw(ctx, 3, 0);
         swap->lpVtbl->Present(swap, 1, 0);
+
+        f++;
+        if (f <= 10 || (f % 60) == 0) {
+            fprintf(stderr, "[triangle] presented frame=%d\n", f);
+        }
     }
 
     fprintf(stderr, "[triangle] exiting cleanly\n");
