@@ -2388,7 +2388,7 @@ static void *ios_mach_exception_thread( void *arg )
              * attempts to read from NULL (fault_addr < 0x10000), emulate the load instruction
              * by clearing the destination register to 0 and advancing PC by 4. */
             uint64_t fault_pc = (uint64_t)__darwin_arm_thread_state64_get_pc(state);
-            if (!handled && (uintptr_t)fault_addr < 0x10000ULL && (uintptr_t)fault_pc >= 0x100000000ULL)
+            if (!handled && (uintptr_t)fault_addr < 0x1000000ULL && (uintptr_t)fault_pc >= 0x100000000ULL)
             {
                 uint32_t insn = 0;
                 mach_vm_size_t ngot = 0;
