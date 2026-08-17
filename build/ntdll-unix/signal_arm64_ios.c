@@ -2420,6 +2420,15 @@ static void *ios_mach_exception_thread( void *arg )
                                 (unsigned long long)fault_pc, insn, rt);
                         handled = 1;
                     }
+                    else
+                    {
+                        /* Zero-Page NULL store emulation: ignore write to unmapped low page and advance PC */
+                        __darwin_arm_thread_state64_set_pc_fptr(state, (void *)(fault_pc + 4));
+                        dprintf(STDERR_FILENO,
+                                "[mach_exc] Emulated Zero-Page NULL store at pc=0x%llx insn=0x%08x addr=0x%llx (store skipped)\n",
+                                (unsigned long long)fault_pc, insn, (unsigned long long)fault_addr);
+                        handled = 1;
+                    }
                 }
             }
 
