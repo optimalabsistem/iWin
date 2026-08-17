@@ -64,7 +64,8 @@ workflows:
           set -e
           export PATH="$(brew --prefix llvm)/bin:$PATH"
           git submodule update --init wine
-          git submodule update --init research/dxmt
+          git submodule update --init --recursive research/dxmt
+          git -C research/dxmt submodule update --init --recursive
           if [ -f patches/0001-dxmt-ios-present-unoccluded.patch ]; then
             git -C research/dxmt apply ../../patches/0001-dxmt-ios-present-unoccluded.patch || true
           fi
