@@ -557,11 +557,17 @@ static void *wine_process_thread(void *arg) {
         // OR a Win32 full path (real game launches typically need ARM64EC).
         const char *force_ec = getenv("MYTHIC_USE_ARM64EC");
         BOOL use_arm64ec = NO;
-        if (strstr(mythic_exe, "explorer") != NULL) {
-            use_arm64ec = NO; // Explorer desktop session uses aarch64-windows
-        } else if (force_ec && *force_ec == '1') {
+        if (force_ec && strcmp(force_ec, "0") == 0) {
+            use_arm64ec = NO;
+        } else if (force_ec && strcmp(force_ec, "1") == 0) {
             use_arm64ec = YES;
-        } else if ((strstr(mythic_exe, "x64") != NULL) || (strchr(mythic_exe, '\\') != NULL)) {
+        } else if (strstr(mythic_exe, "explorer") != NULL) {
+            use_arm64ec = NO;
+        } else if (strstr(mythic_exe, "cube-x64") != NULL || strstr(mythic_exe, "x64") != NULL || strstr(mythic_exe, "x86_64") != NULL) {
+            use_arm64ec = YES;
+        } else if (strstr(mythic_exe, "cube.exe") != NULL || strstr(mythic_exe, "triangle.exe") != NULL || strstr(mythic_exe, "texquad.exe") != NULL) {
+            use_arm64ec = NO;
+        } else if (strchr(mythic_exe, '\\') != NULL) {
             use_arm64ec = YES;
         }
         const char *bundle_subdir = use_arm64ec ? "arm64ec-windows" : "aarch64-windows";

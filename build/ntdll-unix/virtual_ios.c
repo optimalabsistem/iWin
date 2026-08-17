@@ -11982,6 +11982,24 @@ NTSTATUS virtual_create_builtin_view( void *module, const UNICODE_STRING *nt_nam
             if (sec[i].Characteristics & IMAGE_SCN_MEM_READ) flags |= VPROT_READ;
             if (sec[i].Characteristics & IMAGE_SCN_MEM_WRITE) flags |= VPROT_WRITE;
             set_page_vprot( (char *)base + sec[i].VirtualAddress, sec[i].Misc.VirtualSize, flags );
+#ifdef WINE_IOS
+            if (sec[i].Characteristics & IMAGE_SCN_MEM_WRITE)
+            {
+                SIZE_T sec_size = sec[i].Misc.VirtualSize ? sec[i].Misc.VirtualSize : sec[i].SizeOfRawData;
+                uintptr_t sec_page = (uintptr_t)((char *)base + sec[i].VirtualAddress) & ~0x3fffULL;
+                SIZE_T map_sz = (((uintptr_t)((char *)base + sec[i].VirtualAddress) + sec_size + 0x3fffULL) & ~0x3fffULL) - sec_page;
+                mprotect((void *)sec_page, map_sz, PROT_READ | PROT_WRITE);
+                SIZE_T raw_sz = sec[i].SizeOfRawData;
+                if (raw_sz < sec_size)
+                {
+                    uintptr_t bss_p = ((uintptr_t)((char *)base + sec[i].VirtualAddress) + raw_sz) & ~0x3fffULL;
+                    SIZE_T bss_sz = (((uintptr_t)((char *)base + sec[i].VirtualAddress) + sec_size + 0x3fffULL) & ~0x3fffULL) - bss_p;
+                    mmap((void *)bss_p, bss_sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
+                    dprintf(2, "[builtin-bss] Allocated RW BSS at 0x%llx size 0x%lx for section %.8s\n",
+                            (unsigned long long)bss_p, (unsigned long)bss_sz, sec[i].Name);
+                }
+            }
+#endif
         }
 
         SERVER_START_REQ( map_builtin_view )

@@ -1853,6 +1853,46 @@ static NTSTATUS open_main_image( UNICODE_STRING *nt_name, void **module, SECTION
             info->Machine = native_machine;
             status = STATUS_SUCCESS;
         }
+        if (status == STATUS_SUCCESS && *module)
+        {
+            IMAGE_DOS_HEADER *dos = *module;
+            if (dos->e_magic == IMAGE_DOS_SIGNATURE)
+            {
+                IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)((char *)*module + dos->e_lfanew);
+                if (nt->Signature == IMAGE_NT_SIGNATURE)
+                {
+                    IMAGE_SECTION_HEADER *sec = IMAGE_FIRST_SECTION(nt);
+                    for (int si = 0; si < nt->FileHeader.NumberOfSections; si++)
+                    {
+                        SIZE_T sec_sz = sec[si].Misc.VirtualSize ? sec[si].Misc.VirtualSize : sec[si].SizeOfRawData;
+                        uintptr_t sec_page = (uintptr_t)((char *)*module + sec[si].VirtualAddress) & ~0x3fffULL;
+                        SIZE_T map_sz = (((uintptr_t)((char *)*module + sec[si].VirtualAddress) + sec_sz + 0x3fffULL) & ~0x3fffULL) - sec_page;
+
+                        if (sec[si].Characteristics & IMAGE_SCN_MEM_WRITE)
+                        {
+                            if (mprotect((void *)sec_page, map_sz, PROT_READ | PROT_WRITE) != 0)
+                            {
+                                void *old_copy = malloc(map_sz);
+                                if (old_copy) memcpy(old_copy, (void *)sec_page, min((SIZE_T)sec[si].SizeOfRawData, map_sz));
+                                mmap((void *)sec_page, map_sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
+                                if (old_copy)
+                                {
+                                    memcpy((void *)sec_page, old_copy, min((SIZE_T)sec[si].SizeOfRawData, map_sz));
+                                    free(old_copy);
+                                }
+                                dprintf(2, "[main-exe-heal] Overwrote section %.8s at 0x%llx size 0x%lx with anonymous RW RAM\n",
+                                        sec[si].Name, (unsigned long long)sec_page, (unsigned long)map_sz);
+                            }
+                            else
+                            {
+                                dprintf(2, "[main-exe-heal] mprotected section %.8s at 0x%llx size 0x%lx to RW\n",
+                                        sec[si].Name, (unsigned long long)sec_page, (unsigned long)map_sz);
+                            }
+                        }
+                    }
+                }
+            }
+        }
         NtClose( mapping );
     }
     else if (status == STATUS_INVALID_IMAGE_NOT_MZ && loadorder != LO_NATIVE)

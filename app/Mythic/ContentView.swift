@@ -1669,7 +1669,7 @@ struct ContentView: View {
             if exeName == "cube.exe" { targetExe = "cube-x64.exe" }
             setenv("MYTHIC_USE_ARM64EC", "1", 1)
         } else {
-            unsetenv("MYTHIC_USE_ARM64EC")
+            setenv("MYTHIC_USE_ARM64EC", "0", 1)
         }
 
         if wineEngineMode == "gdi_desktop" {
