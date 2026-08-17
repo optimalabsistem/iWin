@@ -4954,6 +4954,65 @@ BOOL WINAPI NtUserTranslateMessage( const MSG *msg, UINT flags )
     NtUserGetKeyboardState( state );
     len = NtUserToUnicodeEx( msg->wParam, HIWORD(msg->lParam), state, wp, ARRAY_SIZE(wp), 0,
                              NtUserGetKeyboardLayout(0) );
+#ifdef WINE_IOS
+    if (len <= 0)
+    {
+        BOOL shift = (state[VK_SHIFT] & 0x80) != 0;
+        BOOL caps = (state[VK_CAPITAL] & 0x01) != 0;
+        UINT vk = msg->wParam;
+
+        if (vk >= 'A' && vk <= 'Z')
+        {
+            BOOL uppercase = (shift ^ caps);
+            wp[0] = uppercase ? (WCHAR)vk : (WCHAR)(vk + 32);
+            len = 1;
+        }
+        else if (vk >= '0' && vk <= '9')
+        {
+            if (shift)
+            {
+                static const WCHAR num_shifted[10] = {')', '!', '@', '#', '$', '%', '^', '&', '*', '('};
+                wp[0] = num_shifted[vk - '0'];
+            }
+            else
+            {
+                wp[0] = (WCHAR)vk;
+            }
+            len = 1;
+        }
+        else if (vk >= VK_NUMPAD0 && vk <= VK_NUMPAD9)
+        {
+            wp[0] = (WCHAR)('0' + (vk - VK_NUMPAD0));
+            len = 1;
+        }
+        else if (vk == VK_MULTIPLY) { wp[0] = '*'; len = 1; }
+        else if (vk == VK_ADD)      { wp[0] = '+'; len = 1; }
+        else if (vk == VK_SUBTRACT) { wp[0] = '-'; len = 1; }
+        else if (vk == VK_DECIMAL)  { wp[0] = '.'; len = 1; }
+        else if (vk == VK_DIVIDE)   { wp[0] = '/'; len = 1; }
+        else if (vk == VK_SPACE)    { wp[0] = ' '; len = 1; }
+        else if (vk == VK_RETURN)   { wp[0] = '\r'; len = 1; }
+        else if (vk == VK_BACK)     { wp[0] = '\b'; len = 1; }
+        else if (vk == VK_TAB)      { wp[0] = '\t'; len = 1; }
+        else
+        {
+            switch (vk)
+            {
+            case VK_OEM_1:      wp[0] = shift ? ':' : ';'; len = 1; break;
+            case VK_OEM_PLUS:   wp[0] = shift ? '+' : '='; len = 1; break;
+            case VK_OEM_COMMA:  wp[0] = shift ? '<' : ','; len = 1; break;
+            case VK_OEM_MINUS:  wp[0] = shift ? '_' : '-'; len = 1; break;
+            case VK_OEM_PERIOD: wp[0] = shift ? '>' : '.'; len = 1; break;
+            case VK_OEM_2:      wp[0] = shift ? '?' : '/'; len = 1; break;
+            case VK_OEM_3:      wp[0] = shift ? '~' : '`'; len = 1; break;
+            case VK_OEM_4:      wp[0] = shift ? '{' : '['; len = 1; break;
+            case VK_OEM_5:      wp[0] = shift ? '|' : '\\'; len = 1; break;
+            case VK_OEM_6:      wp[0] = shift ? '}' : ']'; len = 1; break;
+            case VK_OEM_7:      wp[0] = shift ? '"' : '\''; len = 1; break;
+            }
+        }
+    }
+#endif
     if (len == -1)
     {
         message = msg->message == WM_KEYDOWN ? WM_DEADCHAR : WM_SYSDEADCHAR;
