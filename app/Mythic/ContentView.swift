@@ -803,13 +803,12 @@ extension MetalBackedView {
         } else if ch == "\u{8}" {
             winios_post_key(0x08, 1)
             winios_post_key(0x08, 0)
+        } else if let (vk, shift) = vkForChar(ch) {
+            if shift { winios_post_key(0x10, 1) }
+            winios_post_key(vk, 1)
+            winios_post_key(vk, 0)
+            if shift { winios_post_key(0x10, 0) }
         } else {
-            if let (vk, shift) = vkForChar(ch) {
-                if shift { winios_post_key(0x10, 1) }
-                winios_post_key(vk, 1)
-                winios_post_key(vk, 0)
-                if shift { winios_post_key(0x10, 0) }
-            }
             for scalar in ch.unicodeScalars {
                 winios_post_char(scalar.value)
             }
