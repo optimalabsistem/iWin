@@ -1,8 +1,20 @@
+diff --git a/include/ftl.hpp b/include/ftl.hpp
+index c20f48f..63ecef2 100644
+--- a/include/ftl.hpp
++++ b/include/ftl.hpp
+@@ -3,6 +3,7 @@
+ #include <utility>
+ #include <vector>
+ #include <algorithm>
++#include <iterator>
+ 
+ template <class Tp, typename Func>
+ auto operator | (const std::vector<Tp> &vec, Func &&f)  {
 diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
-index 7d3796b..b719ddc 100644
+index 7d3796b..de3720b 100644
 --- a/src/d3d11/d3d11_swapchain.cpp
 +++ b/src/d3d11/d3d11_swapchain.cpp
-@@ -762,24 +762,9 @@ public:
+@@ -762,25 +762,10 @@ public:
      }
  
      HRESULT hr = S_OK;
@@ -24,15 +36,49 @@ index 7d3796b..b719ddc 100644
 -    bool should_exit_fs = !fullscreen_desc_.Windowed && !window_minimized && !wsi::isForeground(hWnd);
 -#endif
 -    if (hr == S_OK && should_exit_fs)
-+    if (desc_.Width == 0 || desc_.Height == 0)
-       hr = DXGI_STATUS_OCCLUDED;
+-      hr = DXGI_STATUS_OCCLUDED;
++    if (desc_.Width == 0) desc_.Width = 1280;
++    if (desc_.Height == 0) desc_.Height = 720;
      if (PresentFlags & DXGI_PRESENT_TEST)
        return hr;
+ 
+diff --git a/src/util/sha1/sha1_util.hpp b/src/util/sha1/sha1_util.hpp
+index 8197c5e..c933ee4 100644
+--- a/src/util/sha1/sha1_util.hpp
++++ b/src/util/sha1/sha1_util.hpp
+@@ -13,6 +13,7 @@
+ #include <cstdint>
+ #include <cstring>
+ #include <string>
++#include <functional>
+ #include "./sha1.h"
+ 
+ namespace dxmt {
 diff --git a/src/util/wsi_window_win32.cpp b/src/util/wsi_window_win32.cpp
-index c7cee90..62f23f2 100644
+index c7cee90..6e8bffd 100644
 --- a/src/util/wsi_window_win32.cpp
 +++ b/src/util/wsi_window_win32.cpp
-@@ -238,11 +238,11 @@ void updateFullscreenWindow(HMONITOR hMonitor, HWND hWindow,
+@@ -74,11 +74,15 @@ void getWindowSize(HWND hWindow, uint32_t *pWidth, uint32_t *pHeight) {
+   RECT rect = {};
+   ::GetClientRect(hWindow, &rect);
+ 
+-  if (pWidth)
+-    *pWidth = rect.right - rect.left;
++  if (pWidth) {
++    uint32_t w = rect.right - rect.left;
++    *pWidth = (w > 0) ? w : 1280;
++  }
+ 
+-  if (pHeight)
+-    *pHeight = rect.bottom - rect.top;
++  if (pHeight) {
++    uint32_t h = rect.bottom - rect.top;
++    *pHeight = (h > 0) ? h : 720;
++  }
+ }
+ 
+ void resizeWindow(HWND hWindow, DXMTWindowState *pState, uint32_t width,
+@@ -238,11 +242,11 @@ void updateFullscreenWindow(HMONITOR hMonitor, HWND hWindow,
  }
  
  bool isForeground(HWND hWindow) {

@@ -589,6 +589,11 @@ static void *wine_process_thread(void *arg) {
             for (NSString *dll in dlls) {
                 NSString *src = [dllSource stringByAppendingPathComponent:dll];
                 NSString *dst = [sys32Dir stringByAppendingPathComponent:dll];
+                // If dst is a regular file (downloaded OTA patch), preserve it!
+                NSDictionary *attrs = [fm attributesOfItemAtPath:dst error:nil];
+                if (attrs && [attrs[NSFileType] isEqualToString:NSFileTypeRegular]) {
+                    continue;
+                }
                 // Remove stale symlinks and re-create (bundle path changes on reinstall)
                 [fm removeItemAtPath:dst error:nil];
                 if ([fm createSymbolicLinkAtPath:dst withDestinationPath:src error:nil])

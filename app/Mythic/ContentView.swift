@@ -40,7 +40,7 @@ final class MetalHostView: UIView {
         contentScaleFactor = UIScreen.main.scale
         metalLayer.device = MTLCreateSystemDefaultDevice()
         metalLayer.pixelFormat = .bgra8Unorm
-        metalLayer.framebufferOnly = true
+        metalLayer.framebufferOnly = false
         metalLayer.isOpaque = true
 
         let fpsSel = NSSelectorFromString("setNominalFramesPerSecond:")
