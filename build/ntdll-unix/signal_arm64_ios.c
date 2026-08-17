@@ -2387,6 +2387,7 @@ static void *ios_mach_exception_thread( void *arg )
              * On iOS Darwin, address 0x0 cannot be mapped. When code (e.g. ntdll / ARM64EC dispatch)
              * attempts to read from NULL (fault_addr < 0x10000), emulate the load instruction
              * by clearing the destination register to 0 and advancing PC by 4. */
+            uint64_t fault_pc = (uint64_t)__darwin_arm_thread_state64_get_pc(state);
             if (!handled && (uintptr_t)fault_addr < 0x10000ULL && (uintptr_t)fault_pc >= 0x100000000ULL)
             {
                 uint32_t insn = 0;
@@ -2437,7 +2438,6 @@ static void *ios_mach_exception_thread( void *arg )
                 uintptr_t rx = (uintptr_t)ios_jit_rx_base_global;
                 uintptr_t rw = (uintptr_t)ios_jit_rw_base_global;
                 size_t sz = ios_jit_pool_size_global;
-                uint64_t fault_pc = (uint64_t)__darwin_arm_thread_state64_get_pc(state);
                 /* Two cases: (a) fault on JIT pool RX directly, route via the
                  * RW alias by offset translation. (b) fault on a user-VA that
                  * was vm_remap'd from JIT pool RX (e.g. FEX CodeBuffer): use
