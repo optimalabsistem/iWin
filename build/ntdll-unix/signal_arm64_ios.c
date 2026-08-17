@@ -2383,6 +2383,45 @@ static void *ios_mach_exception_thread( void *arg )
                 }
             }
 
+            /* Zero-Page Trap Emulation (Page 0 NULL dereference handling):
+             * On iOS Darwin, address 0x0 cannot be mapped. When code (e.g. ntdll / ARM64EC dispatch)
+             * attempts to read from NULL (fault_addr < 0x10000), emulate the load instruction
+             * by clearing the destination register to 0 and advancing PC by 4. */
+            if (!handled && (uintptr_t)fault_addr < 0x10000ULL && (uintptr_t)fault_pc >= 0x100000000ULL)
+            {
+                uint32_t insn = 0;
+                mach_vm_size_t ngot = 0;
+                if (mach_vm_read_overwrite(mach_task_self(), (mach_vm_address_t)fault_pc, 4,
+                                           (mach_vm_address_t)&insn, &ngot) == KERN_SUCCESS && ngot == 4)
+                {
+                    int is_load = 0;
+                    int rt = insn & 0x1f;
+                    int rt2 = (insn >> 10) & 0x1f;
+
+                    if ((insn & 0x0a000000) == 0x08000000) /* Load/Store exclusive */
+                        is_load = (insn & (1 << 22)) != 0;
+                    else if ((insn & 0x3b000000) == 0x39000000) /* Load/Store unsigned immediate */
+                        is_load = (insn & (1 << 22)) != 0;
+                    else if ((insn & 0x3b200c00) == 0x38200800) /* Load/Store register offset */
+                        is_load = (insn & (1 << 22)) != 0;
+                    else if ((insn & 0x3b000000) == 0x38000000) /* Load/Store unscaled immediate */
+                        is_load = (insn & (1 << 22)) != 0;
+                    else if ((insn & 0x3e000000) == 0x28000000) /* LDP / STP */
+                        is_load = (insn & (1 << 22)) != 0;
+
+                    if (is_load)
+                    {
+                        if (rt != 31) state.__x[rt] = 0;
+                        if ((insn & 0x3e000000) == 0x28000000 && rt2 != 31) state.__x[rt2] = 0;
+                        __darwin_arm_thread_state64_set_pc_fptr(state, (void *)(fault_pc + 4));
+                        dprintf(STDERR_FILENO,
+                                "[mach_exc] Emulated Zero-Page NULL load at pc=0x%llx insn=0x%08x (Rt=x%d set to 0)\n",
+                                (unsigned long long)fault_pc, insn, rt);
+                        handled = 1;
+                    }
+                }
+            }
+
             /* 4. Emulate stores to JIT-pool RX aliases by redirecting them
              * to the corresponding JIT-pool RW alias address. iOS dual-map
              * blocks W on the RX side even with vm_protect+VM_PROT_COPY,
@@ -2441,7 +2480,16 @@ static void *ios_mach_exception_thread( void *arg )
                             else
                             {
                                 mach_vm_address_t page_addr = (mach_vm_address_t)fault_addr & ~0x3fffULL;
-                                if (mach_vm_allocate(mach_task_self(), &page_addr, 0x4000, VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE) == KERN_SUCCESS)
+                                void *mres = mmap((void *)page_addr, 0x4000, PROT_READ | PROT_WRITE,
+                                                  MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
+                                if (mres != MAP_FAILED)
+                                {
+                                    dprintf(STDERR_FILENO,
+                                        "[mach-heal] Overwrote and allocated RW 16KB page via mmap at 0x%llx for fault at 0x%llx\n",
+                                        (unsigned long long)page_addr, (unsigned long long)fault_addr);
+                                    handled = 1;
+                                }
+                                else if (mach_vm_allocate(mach_task_self(), &page_addr, 0x4000, VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE) == KERN_SUCCESS)
                                 {
                                     dprintf(STDERR_FILENO,
                                         "[mach-heal] Allocated fresh RW 16KB page 0x%llx for fault at 0x%llx\n",
@@ -3405,7 +3453,10 @@ skip_reclaim_band: ;
                 kern_return_t kr = mach_vm_protect(mach_task_self(), page_addr, 0x4000, FALSE, VM_PROT_READ | VM_PROT_WRITE);
                 if (kr != KERN_SUCCESS)
                 {
-                    kr = mach_vm_allocate(mach_task_self(), &page_addr, 0x4000, VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE);
+                    void *mres = mmap((void *)page_addr, 0x4000, PROT_READ | PROT_WRITE,
+                                      MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
+                    if (mres != MAP_FAILED) kr = KERN_SUCCESS;
+                    else kr = mach_vm_allocate(mach_task_self(), &page_addr, 0x4000, VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE);
                 }
                 if (kr == KERN_SUCCESS)
                 {
@@ -9233,6 +9284,15 @@ static void bus_handler( int signal, siginfo_t *siginfo, void *sigcontext )
                             return;
                         }
                         mach_vm_address_t page_addr = (mach_vm_address_t)(uintptr_t)siginfo->si_addr & ~0x3fffULL;
+                        void *mres = mmap((void *)page_addr, 0x4000, PROT_READ | PROT_WRITE,
+                                          MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
+                        if (mres != MAP_FAILED)
+                        {
+                            dprintf(STDERR_FILENO, "[bus-heal-rw] Overwrote and allocated RW 16KB page via mmap at 0x%llx for fault at %p\n",
+                                    (unsigned long long)page_addr, siginfo->si_addr);
+                            ios_fixup_x18_for_return( bus_ctx );
+                            return;
+                        }
                         if (mach_vm_allocate(mach_task_self(), &page_addr, 0x4000, VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE) == KERN_SUCCESS)
                         {
                             dprintf(STDERR_FILENO, "[bus-heal-rw] Overwrote and allocated RW 16KB page 0x%llx for fault at %p\n",
@@ -9530,7 +9590,10 @@ static void bus_handler( int signal, siginfo_t *siginfo, void *sigcontext )
                         kern_return_t kr = mach_vm_protect( mach_task_self(), target, WR_HPAGE, FALSE, VM_PROT_READ | VM_PROT_WRITE );
                         if (kr != KERN_SUCCESS)
                         {
-                            kr = mach_vm_allocate( mach_task_self(), &target, WR_HPAGE, VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE );
+                            void *mres = mmap((void *)target, WR_HPAGE, PROT_READ | PROT_WRITE,
+                                              MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
+                            if (mres != MAP_FAILED) kr = KERN_SUCCESS;
+                            else kr = mach_vm_allocate( mach_task_self(), &target, WR_HPAGE, VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE );
                         }
                         if (kr == KERN_SUCCESS)
                         {
@@ -9570,7 +9633,10 @@ static void bus_handler( int signal, siginfo_t *siginfo, void *sigcontext )
                         kern_return_t kr = mach_vm_protect( mach_task_self(), target, BUS_HPAGE, FALSE, VM_PROT_READ | VM_PROT_WRITE );
                         if (kr != KERN_SUCCESS)
                         {
-                            kr = mach_vm_allocate( mach_task_self(), &target, BUS_HPAGE, VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE );
+                            void *mres = mmap((void *)target, BUS_HPAGE, PROT_READ | PROT_WRITE,
+                                              MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
+                            if (mres != MAP_FAILED) kr = KERN_SUCCESS;
+                            else kr = mach_vm_allocate( mach_task_self(), &target, BUS_HPAGE, VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE );
                         }
                         if (kr == KERN_SUCCESS)
                         {
