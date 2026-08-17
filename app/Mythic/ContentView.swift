@@ -956,8 +956,10 @@ struct ContentView: View {
     }
 
     @State private var selectedTab: MainTab = .screen
-    @State private var desktopResolution: String = "1280x720"
-    @State private var poolSizeSetting: Int = 896
+    @AppStorage("desktop_resolution") private var desktopResolution: String = "1280x720"
+    @AppStorage("wine_engine_mode") private var wineEngineMode: String = "native_arm64"
+    @AppStorage("d3d_renderer") private var d3dRenderer: String = "dxmt_metal"
+    @AppStorage("jit_pool_size") private var poolSizeSetting: Int = 384
     @State private var logSearchText: String = ""
     @AppStorage("remote_log_server") private var remoteLogServer: String = "https://participation-disciplinary-que-carbon.trycloudflare.com/log"
     @State private var serverTestStatus: String = ""
@@ -1183,6 +1185,76 @@ struct ContentView: View {
     private var launcherTabView: some View {
         ScrollView {
             VStack(spacing: 16) {
+                // Card 0: Winlator-style Wine Container & Engine Settings
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.title2)
+                            .foregroundColor(.cyan)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Wine Container & Engine Configuration")
+                                .font(.headline)
+                            Text("Customize Wine architecture, 3D Direct3D graphics driver, and resolution.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                    }
+
+                    VStack(spacing: 8) {
+                        HStack {
+                            Label("Wine Engine / Arch:", systemImage: "cpu")
+                                .font(.caption.weight(.medium))
+                            Spacer()
+                            Picker("", selection: $wineEngineMode) {
+                                Text("⚡ Native ARM64 (Direct Metal)").tag("native_arm64")
+                                Text("🕹️ ARM64EC / FEX x86-64").tag("arm64ec_x64")
+                                Text("🖥️ Virtual Desktop Container").tag("gdi_desktop")
+                            }
+                            .pickerStyle(.menu)
+                        }
+
+                        HStack {
+                            Label("Graphics Driver:", systemImage: "sparkles")
+                                .font(.caption.weight(.medium))
+                            Spacer()
+                            Picker("", selection: $d3dRenderer) {
+                                Text("🍏 DXMT Direct Metal (Hardware)").tag("dxmt_metal")
+                                Text("🎨 GDI Software Rasterizer").tag("gdi_software")
+                            }
+                            .pickerStyle(.menu)
+                        }
+
+                        HStack {
+                            Label("Resolution:", systemImage: "aspectratio")
+                                .font(.caption.weight(.medium))
+                            Spacer()
+                            Picker("", selection: $desktopResolution) {
+                                Text("1920x1080 (1080p FHD)").tag("1920x1080")
+                                Text("1600x900 (900p HD+)").tag("1600x900")
+                                Text("1280x720 (720p HD)").tag("1280x720")
+                                Text("1024x768 (4:3 Standard)").tag("1024x768")
+                                Text("800x600 (4:3 Retro)").tag("800x600")
+                            }
+                            .pickerStyle(.menu)
+                        }
+
+                        HStack {
+                            Label("JIT Memory Pool:", systemImage: "memorychip")
+                                .font(.caption.weight(.medium))
+                            Spacer()
+                            Picker("", selection: $poolSizeSetting) {
+                                Text("128 MB (Lite 3D)").tag(128)
+                                Text("384 MB (Standard)").tag(384)
+                                Text("896 MB (Heavy Games / Steam)").tag(896)
+                            }
+                            .pickerStyle(.menu)
+                        }
+                    }
+                }
+                .padding(16)
+                .background(RoundedRectangle(cornerRadius: 14).fill(Color(UIColor.secondarySystemBackground)))
+
                 // Card 1: Windows Desktop
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
@@ -1591,12 +1663,25 @@ struct ContentView: View {
         let w = parts.count == 2 ? (Int(parts[0]) ?? 1280) : 1280
         let h = parts.count == 2 ? (Int(parts[1]) ?? 720) : 720
         winios_teardown_compositor()
-        setenv("MYTHIC_EXE", exeName, 1)
+
+        var targetExe = exeName
+        if wineEngineMode == "arm64ec_x64" {
+            if exeName == "cube.exe" { targetExe = "cube-x64.exe" }
+            setenv("MYTHIC_USE_ARM64EC", "1", 1)
+        } else {
+            unsetenv("MYTHIC_USE_ARM64EC")
+        }
+
+        if wineEngineMode == "gdi_desktop" {
+            launchDirectApp(targetExe)
+            return
+        }
+
+        setenv("MYTHIC_EXE", targetExe, 1)
         unsetenv("MYTHIC_ARGS")
         unsetenv("MYTHIC_DESKTOP")
         setenv("MYTHIC_SCREEN_W", String(w), 1)
         setenv("MYTHIC_SCREEN_H", String(h), 1)
-        unsetenv("MYTHIC_USE_ARM64EC")
         selectedTab = .screen
         runWineFullSequence()
     }
@@ -2549,7 +2634,10 @@ struct ContentView: View {
             // so it can be swapped between runs without a rebuild, and deleting
             // the file reverts to the proven default. Clamped to sane values --
             // a typo here would otherwise move the VA floor with it.
-            var poolSizeMB = checkAppEntitlement("com.apple.developer.kernel.extended-virtual-addressing") ? 896 : 128
+            var poolSizeMB = poolSizeSetting
+            if !checkAppEntitlement("com.apple.developer.kernel.extended-virtual-addressing") {
+                poolSizeMB = min(poolSizeMB, 128)
+            }
             if let d = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
                let txt = try? String(contentsOf: d.appendingPathComponent("mythic-pool.txt"), encoding: .utf8),
                let mb = Int(txt.trimmingCharacters(in: .whitespacesAndNewlines)),
