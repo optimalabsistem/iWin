@@ -11228,26 +11228,40 @@ static NTSTATUS map_image_into_view( struct file_view *view, const UNICODE_STRIN
     status = STATUS_SUCCESS;
 
 #ifdef WINE_IOS
-    /* Eagerly JIT-copy all EXEC sections right here — every PE load goes
-     * through map_image_into_view, regardless of whether it's via
-     * virtual_map_image (builtin flag) or any alternate path. */
-    ERR("iOS map_image_into_view: view=%p EXEC fixup\n", ptr);
+    /* Eagerly JIT-copy all EXEC sections and allocate all DATA / BSS sections right here */
+    ERR("iOS map_image_into_view: view=%p section fixup\n", ptr);
     for (int si = 0; si < nt->FileHeader.NumberOfSections; si++)
     {
-        if (!(sec[si].Characteristics & IMAGE_SCN_MEM_EXECUTE)) continue;
         SIZE_T sec_size = sec[si].Misc.VirtualSize
             ? ROUND_SIZE(sec[si].VirtualAddress, sec[si].Misc.VirtualSize, align_mask)
             : ROUND_SIZE(sec[si].VirtualAddress, sec[si].SizeOfRawData, align_mask);
         void *sec_addr = ptr + sec[si].VirtualAddress;
-        int prot = PROT_READ | PROT_EXEC;
-        if (sec[si].Characteristics & IMAGE_SCN_MEM_WRITE) prot |= PROT_WRITE;
-        ERR("iOS: eager JIT-copy section %.8s (addr=%p size=0x%lx)\n",
-            sec[si].Name, sec_addr, (unsigned long)sec_size);
-        mprotect_exec(sec_addr, sec_size, prot);
+
+        if (sec[si].Characteristics & IMAGE_SCN_MEM_EXECUTE)
+        {
+            int prot = PROT_READ | PROT_EXEC;
+            if (sec[si].Characteristics & IMAGE_SCN_MEM_WRITE) prot |= PROT_WRITE;
+            ERR("iOS: eager JIT-copy section %.8s (addr=%p size=0x%lx)\n",
+                sec[si].Name, sec_addr, (unsigned long)sec_size);
+            mprotect_exec(sec_addr, sec_size, prot);
+        }
+        else if (sec[si].Characteristics & (IMAGE_SCN_MEM_WRITE | IMAGE_SCN_MEM_READ))
+        {
+            /* If section has no raw data or file_size < sec_size, ensure the remaining BSS / data pages are backed by real RW RAM */
+            SIZE_T raw_sz = sec[si].PointerToRawData ? min(sec[si].SizeOfRawData, sec_size) : 0;
+            if (raw_sz < sec_size)
+            {
+                void *bss_start = (char *)sec_addr + raw_sz;
+                SIZE_T bss_size = sec_size - raw_sz;
+                uintptr_t bss_page = (uintptr_t)bss_start & ~(uintptr_t)host_page_mask;
+                SIZE_T bss_map_size = ROUND_SIZE(0, ((uintptr_t)bss_start + bss_size) - bss_page, host_page_mask);
+                void *mapped = mmap((void *)bss_page, bss_map_size, PROT_READ | PROT_WRITE,
+                                    MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
+                ERR("iOS: allocated BSS/data section %.8s (addr=%p size=0x%lx, mmap=%p)\n",
+                    sec[si].Name, (void *)bss_page, (unsigned long)bss_map_size, mapped);
+            }
+        }
     }
-    /* iOS: data sections were mapped MAP_PRIVATE + PROT_READ|PROT_WRITE
-     * (see map_file_into_view) so they're already mprotect-able. No
-     * post-hoc fixup needed. */
 #endif
 
 done:
