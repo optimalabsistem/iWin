@@ -2438,6 +2438,17 @@ static void *ios_mach_exception_thread( void *arg )
                                     (unsigned long long)na, (unsigned long long)ns, (unsigned long long)fault_addr, ni.protection);
                                 handled = 1;
                             }
+                            else
+                            {
+                                mach_vm_address_t page_addr = (mach_vm_address_t)fault_addr & ~0x3fffULL;
+                                if (mach_vm_allocate(mach_task_self(), &page_addr, 0x4000, VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE) == KERN_SUCCESS)
+                                {
+                                    dprintf(STDERR_FILENO,
+                                        "[mach-heal] Allocated fresh RW 16KB page 0x%llx for fault at 0x%llx\n",
+                                        (unsigned long long)page_addr, (unsigned long long)fault_addr);
+                                    handled = 1;
+                                }
+                            }
                         }
                     }
                     if (!handled)
@@ -3391,7 +3402,12 @@ skip_reclaim_band: ;
             if (!handled && (uintptr_t)fault_addr >= 0x100000000ULL)
             {
                 mach_vm_address_t page_addr = (mach_vm_address_t)fault_addr & ~0x3fffULL;
-                if (mach_vm_protect(mach_task_self(), page_addr, 0x4000, FALSE, VM_PROT_READ | VM_PROT_WRITE) == KERN_SUCCESS)
+                kern_return_t kr = mach_vm_protect(mach_task_self(), page_addr, 0x4000, FALSE, VM_PROT_READ | VM_PROT_WRITE);
+                if (kr != KERN_SUCCESS)
+                {
+                    kr = mach_vm_allocate(mach_task_self(), &page_addr, 0x4000, VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE);
+                }
+                if (kr == KERN_SUCCESS)
                 {
                     dprintf(STDERR_FILENO,
                         "[mach-heal-page] Restored RW to 16KB page 0x%llx for fault at 0x%llx\n",
@@ -9216,6 +9232,14 @@ static void bus_handler( int signal, siginfo_t *siginfo, void *sigcontext )
                             ios_fixup_x18_for_return( bus_ctx );
                             return;
                         }
+                        mach_vm_address_t page_addr = (mach_vm_address_t)(uintptr_t)siginfo->si_addr & ~0x3fffULL;
+                        if (mach_vm_allocate(mach_task_self(), &page_addr, 0x4000, VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE) == KERN_SUCCESS)
+                        {
+                            dprintf(STDERR_FILENO, "[bus-heal-rw] Overwrote and allocated RW 16KB page 0x%llx for fault at %p\n",
+                                    (unsigned long long)page_addr, siginfo->si_addr);
+                            ios_fixup_x18_for_return( bus_ctx );
+                            return;
+                        }
                     }
                 }
             }
@@ -9502,7 +9526,13 @@ static void bus_handler( int signal, siginfo_t *siginfo, void *sigcontext )
                     {
                         enum { WR_HPAGE = 0x4000 };
                         char *hp = (char *)((uintptr_t)siginfo->si_addr & ~(uintptr_t)(WR_HPAGE - 1));
-                        if (mach_vm_protect( mach_task_self(), (mach_vm_address_t)hp, WR_HPAGE, FALSE, VM_PROT_READ | VM_PROT_WRITE ) == KERN_SUCCESS)
+                        mach_vm_address_t target = (mach_vm_address_t)hp;
+                        kern_return_t kr = mach_vm_protect( mach_task_self(), target, WR_HPAGE, FALSE, VM_PROT_READ | VM_PROT_WRITE );
+                        if (kr != KERN_SUCCESS)
+                        {
+                            kr = mach_vm_allocate( mach_task_self(), &target, WR_HPAGE, VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE );
+                        }
+                        if (kr == KERN_SUCCESS)
                         {
                             ++wr_healed;
                             ERR("[wr-strip] restored RW on %p — resuming "
@@ -9510,7 +9540,7 @@ static void bus_handler( int signal, siginfo_t *siginfo, void *sigcontext )
                             ios_fixup_x18_for_return( bus_ctx );
                             return;
                         }
-                        ERR("[wr-strip] mach_vm_protect(%p) FAILED — falling to AV rev=ml552\n",
+                        ERR("[wr-strip] mach_vm_protect+allocate(%p) FAILED — falling to AV rev=ml552\n",
                             (void *)hp);
                     }
                 }
@@ -9536,14 +9566,20 @@ static void bus_handler( int signal, siginfo_t *siginfo, void *sigcontext )
                          * Mach FUNCTION, not a size (see the ml-era note above) */
                         enum { BUS_HPAGE = 0x4000 };
                         char *hpage = (char *)((uintptr_t)siginfo->si_addr & ~(uintptr_t)(BUS_HPAGE - 1));
-                        if (mach_vm_protect( mach_task_self(), (mach_vm_address_t)hpage, BUS_HPAGE, FALSE, VM_PROT_READ | VM_PROT_WRITE ) == KERN_SUCCESS)
+                        mach_vm_address_t target = (mach_vm_address_t)hpage;
+                        kern_return_t kr = mach_vm_protect( mach_task_self(), target, BUS_HPAGE, FALSE, VM_PROT_READ | VM_PROT_WRITE );
+                        if (kr != KERN_SUCCESS)
+                        {
+                            kr = mach_vm_allocate( mach_task_self(), &target, BUS_HPAGE, VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE );
+                        }
+                        if (kr == KERN_SUCCESS)
                         {
                             ERR("[bus-reheal] #%d re-applied RW on %p — resuming rev=ml560\n",
                                 rehealed, hpage);
                             ios_fixup_x18_for_return( bus_ctx );
                             return;
                         }
-                        ERR("[bus-reheal] #%d mach_vm_protect(%p) FAILED — falling to AV\n",
+                        ERR("[bus-reheal] #%d mach_vm_protect+allocate(%p) FAILED — falling to AV\n",
                             rehealed, (void *)hpage);
                     }
                 }
