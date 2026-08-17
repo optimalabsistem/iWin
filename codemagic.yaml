@@ -19,8 +19,9 @@ workflows:
           brew install ninja llvm@15 llvm gnutls freetype mingw-w64 meson
           mkdir -p toolchains
           if [ ! -d "toolchains/llvm-mingw-20260421-ucrt-macos-universal" ]; then
-            echo "Downloading llvm-mingw..."
-            curl -sL https://github.com/mstorsjo/llvm-mingw/releases/download/20260421/llvm-mingw-20260421-ucrt-macos-universal.tar.xz | tar -xJ -C toolchains/
+            echo "Downloading llvm-mingw release 20260812..."
+            curl -sL https://github.com/mstorsjo/llvm-mingw/releases/download/20260812/llvm-mingw-20260812-ucrt-macos-universal.tar.xz | tar -xJ -C toolchains/
+            ln -sf llvm-mingw-20260812-ucrt-macos-universal toolchains/llvm-mingw-20260421-ucrt-macos-universal
           fi
       - name: Setup Submodules and Build FEX for iOS
         script: |
