@@ -11252,6 +11252,7 @@ static NTSTATUS map_image_into_view( struct file_view *view, const UNICODE_STRIN
             {
                 uintptr_t bss_page = (uintptr_t)sec_addr & ~(uintptr_t)host_page_mask;
                 SIZE_T bss_map_size = ROUND_SIZE((uintptr_t)sec_addr, sec_size, host_page_mask) - bss_page;
+                mach_vm_deallocate(mach_task_self(), (mach_vm_address_t)bss_page, bss_map_size);
                 void *mapped = mmap((void *)bss_page, bss_map_size, PROT_READ | PROT_WRITE,
                                     MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
                 ERR("iOS: allocated pure BSS section %.8s (addr=%p size=0x%lx, mmap=%p)\n",
@@ -11268,6 +11269,7 @@ static NTSTATUS map_image_into_view( struct file_view *view, const UNICODE_STRIN
                 if (bss_page < sec_end)
                 {
                     SIZE_T bss_map_size = sec_end - bss_page;
+                    mach_vm_deallocate(mach_task_self(), (mach_vm_address_t)bss_page, bss_map_size);
                     void *mapped = mmap((void *)bss_page, bss_map_size, PROT_READ | PROT_WRITE,
                                         MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
                     ERR("iOS: allocated tail BSS section %.8s (addr=%p size=0x%lx, mmap=%p)\n",
@@ -12005,6 +12007,7 @@ NTSTATUS virtual_create_builtin_view( void *module, const UNICODE_STRING *nt_nam
                 if (raw_sz == 0)
                 {
                     SIZE_T bss_sz = ROUND_SIZE((uintptr_t)((char *)base + sec[i].VirtualAddress), sec_size, host_page_mask) - sec_page;
+                    mach_vm_deallocate(mach_task_self(), (mach_vm_address_t)sec_page, bss_sz);
                     mmap((void *)sec_page, bss_sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
                 }
                 else
@@ -12017,6 +12020,7 @@ NTSTATUS virtual_create_builtin_view( void *module, const UNICODE_STRING *nt_nam
                     if (bss_p < sec_end)
                     {
                         SIZE_T bss_sz = sec_end - bss_p;
+                        mach_vm_deallocate(mach_task_self(), (mach_vm_address_t)bss_p, bss_sz);
                         mmap((void *)bss_p, bss_sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
                     }
                 }

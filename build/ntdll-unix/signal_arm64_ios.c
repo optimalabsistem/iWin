@@ -2480,6 +2480,7 @@ static void *ios_mach_exception_thread( void *arg )
                             else
                             {
                                 mach_vm_address_t page_addr = (mach_vm_address_t)fault_addr & ~0x3fffULL;
+                                mach_vm_deallocate(mach_task_self(), page_addr, 0x4000);
                                 void *mres = mmap((void *)page_addr, 0x4000, PROT_READ | PROT_WRITE,
                                                   MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
                                 if (mres != MAP_FAILED)
@@ -3453,6 +3454,7 @@ skip_reclaim_band: ;
                 kern_return_t kr = mach_vm_protect(mach_task_self(), page_addr, 0x4000, FALSE, VM_PROT_READ | VM_PROT_WRITE);
                 if (kr != KERN_SUCCESS)
                 {
+                    mach_vm_deallocate(mach_task_self(), page_addr, 0x4000);
                     void *mres = mmap((void *)page_addr, 0x4000, PROT_READ | PROT_WRITE,
                                       MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
                     if (mres != MAP_FAILED) kr = KERN_SUCCESS;
@@ -9633,6 +9635,7 @@ static void bus_handler( int signal, siginfo_t *siginfo, void *sigcontext )
                         kern_return_t kr = mach_vm_protect( mach_task_self(), target, BUS_HPAGE, FALSE, VM_PROT_READ | VM_PROT_WRITE );
                         if (kr != KERN_SUCCESS)
                         {
+                            mach_vm_deallocate( mach_task_self(), target, BUS_HPAGE );
                             void *mres = mmap((void *)target, BUS_HPAGE, PROT_READ | PROT_WRITE,
                                               MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
                             if (mres != MAP_FAILED) kr = KERN_SUCCESS;
