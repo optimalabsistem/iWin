@@ -94,28 +94,7 @@ workflows:
           ./build/win32u-unix/build.sh
           ./build/dxmt-ios/build.sh
 
-          echo "=== Compiling DXMT PE DLLs (d3d11.dll, dxgi.dll, winemetal.dll) ==="
-          rm -rf research/dxmt/toolchains
-          ln -sfn "$(pwd)/toolchains" "$(pwd)/research/dxmt/toolchains"
-          (
-            cd research/dxmt
-            SDKROOT=$(xcrun --sdk macosx --show-sdk-path) \
-            PATH="$(pwd)/toolchains/llvm-mingw-20260421-ucrt-macos-universal/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH" \
-            meson setup --cross-file build-aarch64-win.txt --native-file build-osx.txt -Dwine_build_path=../../wine/build-macos build-pe || \
-            meson setup --reconfigure --cross-file build-aarch64-win.txt --native-file build-osx.txt -Dwine_build_path=../../wine/build-macos build-pe
-            
-            SDKROOT=$(xcrun --sdk macosx --show-sdk-path) \
-            PATH="$(pwd)/toolchains/llvm-mingw-20260421-ucrt-macos-universal/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH" \
-            meson compile -C build-pe
-            
-            cp build-pe/src/d3d11/d3d11.dll \
-               build-pe/src/dxgi/dxgi.dll \
-               build-pe/src/winemetal/winemetal.dll \
-               build-pe/src/d3d10/d3d10core.dll \
-               ../../app/Mythic/aarch64-windows/
-          )
-
-          ls -lh app/Mythic/*.a app/Mythic/aarch64-windows/*.dll
+          ls -lh app/Mythic/*.a
       - name: Build iOS Archive (Ad-hoc / Unsigned)
         script: |
           xcodebuild archive \
