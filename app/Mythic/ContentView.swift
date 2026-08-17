@@ -994,6 +994,13 @@ struct ContentView: View {
             .fileImporter(isPresented: $showingFileImporter, allowedContentTypes: [.item]) { result in
                 handleImportedFile(result)
             }
+            .onReceive(NotificationCenter.default.publisher(for: .mythicLaunch3DTest)) { notif in
+                let target = (notif.object as? String) ?? "cube.exe"
+                launchStandalone3DTest(target)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .mythicStopWine)) { _ in
+                winios_teardown_compositor()
+            }
         }
     }
 

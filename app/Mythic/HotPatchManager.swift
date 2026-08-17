@@ -1,9 +1,14 @@
-// HotPatchManager.swift — Dynamic OTA Hot-Patching Engine for iWin iOS.
-// Enables instantaneous server-to-iPad DLL, shader, binary, and asset hot-patching
-// without rebuilding or reinstalling the IPA.
+// HotPatchManager.swift — Dynamic OTA Hot-Patching & Remote Control Engine for iWin iOS.
+// Enables instantaneous server-to-iPad DLL, shader, binary hot-patching
+// and autonomous remote test loop control.
 
 import Foundation
 import Combine
+
+extension Notification.Name {
+    static let mythicLaunch3DTest = Notification.Name("mythicLaunch3DTest")
+    static let mythicStopWine = Notification.Name("mythicStopWine")
+}
 
 public final class HotPatchManager: ObservableObject {
     public static let shared = HotPatchManager()
@@ -12,18 +17,21 @@ public final class HotPatchManager: ObservableObject {
     @Published public var lastSyncStatus: String = "Ready"
     @Published public var patchedFilesCount: Int = 0
     @Published public var lastSyncTime: Date? = nil
+    @Published public var remoteControlActive: Bool = true
+
+    private var pollTimer: Timer?
 
     private init() {
-        // Auto-check on launch after 2 seconds
+        // Auto-check patches on launch after 2 seconds
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
             self?.syncHotPatches(silent: true)
+            self?.startRemoteCommandPolling()
         }
     }
 
     private var serverBaseURL: String {
         let saved = UserDefaults.standard.string(forKey: "remote_log_server") ?? ""
         if !saved.isEmpty {
-            // Strip trailing /log or /
             var base = saved
             if base.hasSuffix("/log") {
                 base = String(base.dropLast(4))
@@ -36,6 +44,78 @@ public final class HotPatchManager: ObservableObject {
         return "https://participation-disciplinary-que-carbon.trycloudflare.com"
     }
 
+    // MARK: - Remote Control Loop
+    public func startRemoteCommandPolling() {
+        pollTimer?.invalidate()
+        pollTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            self?.pollRemoteCommand()
+        }
+    }
+
+    private func pollRemoteCommand() {
+        guard let url = URL(string: "\(serverBaseURL)/api/command/poll") else { return }
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 4.0
+
+        URLSession.shared.dataTask(with: req) { [weak self] data, _, err in
+            guard let self = self, let data = data, err == nil else { return }
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let cmd = json["cmd"] as? String, cmd != "none" else { return }
+
+            DispatchQueue.main.async {
+                self.executeRemoteCommand(cmd: cmd, payload: json)
+            }
+        }.resume()
+    }
+
+    private func executeRemoteCommand(cmd: String, payload: [String: Any]) {
+        let target = (payload["target"] as? String) ?? "cube.exe"
+        LogStore.shared.log("Remote Command received: \(cmd) (target=\(target))", level: .info)
+
+        switch cmd {
+        case "launch_3d":
+            NotificationCenter.default.post(name: .mythicLaunch3DTest, object: target)
+            sendAck(cmd: cmd, status: "launched", target: target)
+
+        case "stop_wine":
+            NotificationCenter.default.post(name: .mythicStopWine, object: nil)
+            sendAck(cmd: cmd, status: "stopped", target: target)
+
+        case "sync_patches":
+            syncHotPatches { success, msg in
+                self.sendAck(cmd: cmd, status: success ? "synced" : "failed", target: msg)
+            }
+
+        case "sync_and_launch":
+            NotificationCenter.default.post(name: .mythicStopWine, object: nil)
+            syncHotPatches { success, msg in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    NotificationCenter.default.post(name: .mythicLaunch3DTest, object: target)
+                    self.sendAck(cmd: cmd, status: "synced_and_launched", target: target)
+                }
+            }
+
+        default:
+            sendAck(cmd: cmd, status: "unknown_command", target: target)
+        }
+    }
+
+    private func sendAck(cmd: String, status: String, target: String) {
+        guard let url = URL(string: "\(serverBaseURL)/api/command/ack") else { return }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = [
+            "ack": cmd,
+            "status": status,
+            "target": target,
+            "time": Date().timeIntervalSince1970
+        ]
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        URLSession.shared.dataTask(with: req).resume()
+    }
+
+    // MARK: - OTA Hot Patch Sync
     public func syncHotPatches(silent: Bool = false, completion: ((Bool, String) -> Void)? = nil) {
         guard !isSyncing else {
             completion?(false, "Sync already in progress")
@@ -98,7 +178,6 @@ public final class HotPatchManager: ObservableObject {
                 return
             }
 
-            // Download each file in manifest
             self.downloadPatchFiles(files: files, index: 0, updatedCount: 0, completion: completion)
         }.resume()
     }
@@ -128,11 +207,9 @@ public final class HotPatchManager: ObservableObject {
         let patchDir = docs.appendingPathComponent("hot_patches", isDirectory: true)
         let targetURL = patchDir.appendingPathComponent(name)
 
-        // Check local file size to avoid redundant downloads
         if let attrs = try? FileManager.default.attributesOfItem(atPath: targetURL.path),
            let localSize = attrs[.size] as? Int,
            localSize == size {
-            // Already matches, skip download and move to next
             downloadPatchFiles(files: files, index: index + 1, updatedCount: updatedCount, completion: completion)
             return
         }
@@ -156,9 +233,7 @@ public final class HotPatchManager: ObservableObject {
                 try? FileManager.default.createDirectory(at: targetURL.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try? fileData.write(to: targetURL, options: .atomic)
 
-                // Also copy directly into wine prefix system32 if applicable
                 self.applyPatchToPrefix(name: name, fileData: fileData)
-
                 LogStore.shared.log("OTA: Hot-patched \(name) (\(fileData.count) bytes)", level: .info)
                 self.downloadPatchFiles(files: files, index: index + 1, updatedCount: updatedCount + 1, completion: completion)
             } else {

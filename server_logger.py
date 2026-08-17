@@ -16,6 +16,9 @@ LOG_FILE = "/home/admin/mythic/live_logs.txt"
 with open(LOG_FILE, "a") as f:
     f.write(f"\n\n=== LOG SESSION STARTED AT {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
 
+COMMAND_QUEUE = []
+COMMAND_LOCK = threading.Lock()
+
 def write_log(source, message):
     timestamp = time.strftime("%H:%M:%S")
     formatted = f"[{timestamp}] [{source}] {message.strip()}"
@@ -74,6 +77,17 @@ class LogHTTPHandler(http.server.BaseHTTPRequestHandler):
             else:
                 self.send_response(404)
                 self.end_headers()
+        elif self.path.startswith("/api/command/poll"):
+            with COMMAND_LOCK:
+                if COMMAND_QUEUE:
+                    cmd = COMMAND_QUEUE.pop(0)
+                else:
+                    cmd = {"cmd": "none"}
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps(cmd).encode("utf-8"))
         else:
             self.send_response(404)
             self.end_headers()
@@ -82,6 +96,34 @@ class LogHTTPHandler(http.server.BaseHTTPRequestHandler):
         length = int(self.headers.get('Content-Length', 0))
         body = self.rfile.read(length).decode('utf-8', errors='replace')
         
+        if self.path == "/api/command/send":
+            try:
+                cmd_data = json.loads(body)
+                with COMMAND_LOCK:
+                    COMMAND_QUEUE.append(cmd_data)
+                write_log("COMMAND/QUEUED", f"Command queued: {cmd_data}")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(b'{"status": "queued"}')
+            except Exception as e:
+                self.send_response(400)
+                self.end_headers()
+            return
+        elif self.path == "/api/command/ack":
+            try:
+                ack_data = json.loads(body)
+                write_log("COMMAND/ACK", f"Result from iPad: {ack_data}")
+            except Exception:
+                write_log("COMMAND/ACK", body)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(b'{"status": "received"}')
+            return
+
         try:
             data = json.loads(body)
             msg = data.get("message") or data.get("log") or body
