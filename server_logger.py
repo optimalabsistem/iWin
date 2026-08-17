@@ -98,10 +98,8 @@ def main():
     udp_thread.start()
 
     # Start HTTP listener
-    class ReusableTCPServer(socketserver.TCPServer):
-        allow_reuse_address = True
-
-    with ReusableTCPServer(("0.0.0.0", HTTP_PORT), LogHTTPHandler) as httpd:
+    socketserver.ThreadingTCPServer.allow_reuse_address = True
+    with socketserver.ThreadingTCPServer(("0.0.0.0", HTTP_PORT), LogHTTPHandler) as httpd:
         print(f"[*] HTTP Log Server listening on 0.0.0.0:{HTTP_PORT}", flush=True)
         try:
             httpd.serve_forever()

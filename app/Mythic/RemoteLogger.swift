@@ -11,7 +11,7 @@ final class RemoteLogger {
     
     var serverURLString: String {
         get {
-            UserDefaults.standard.string(forKey: "remote_log_server") ?? "http://10.92.38.13:8080/log"
+            UserDefaults.standard.string(forKey: "remote_log_server") ?? "https://cheese-casino-foo-similarly.trycloudflare.com/log"
         }
         set {
             UserDefaults.standard.set(newValue, forKey: "remote_log_server")
