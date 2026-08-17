@@ -46,6 +46,15 @@ for shader in msad samplepos tessellation; do
     fi
 done
 
+if [ -f "$DXMT_SRC/dxmt/dxmt_command.metal" ]; then
+    echo "=== Generating dxmt_command.h from dxmt_command.metal ==="
+    if xcrun -sdk iphoneos metal -c -std=metal3.1 "$DXMT_SRC/dxmt/dxmt_command.metal" -o "$OBJ_DIR/dxmt_command.air" 2>/dev/null; then
+        xcrun -sdk iphoneos metallib "$OBJ_DIR/dxmt_command.air" -o "$OBJ_DIR/dxmt_command.metallib"
+        xxd -i "$OBJ_DIR/dxmt_command.metallib" | sed "s/unsigned char.*=/const unsigned char dxmt_command[] =/" | sed "s/unsigned int.*=/const unsigned int dxmt_command_len =/" > "$DXMT_SRC/dxmt/dxmt_command.h"
+        echo "dxmt_command.metallib compiled successfully ($(wc -c < "$OBJ_DIR/dxmt_command.metallib") bytes)"
+    fi
+fi
+
 compile_objc() {
     local src=$1 name=$2
     printf "  %-40s " "$name"

@@ -92,3 +92,33 @@ index c7cee90..6e8bffd 100644
  }
  
  } // namespace dxmt::wsi
+diff --git a/src/winemetal/unix/winemetal_unix.c b/src/winemetal/unix/winemetal_unix.c
+index 30cb25d..c436c22 100644
+--- a/src/winemetal/unix/winemetal_unix.c
++++ b/src/winemetal/unix/winemetal_unix.c
+@@ -553,7 +553,24 @@ _MTLDevice_newLibrary(void *obj) {
+   struct unixcall_mtldevice_newlibrary *params = obj;
+   id<MTLDevice> device = (id<MTLDevice>)params->device;
+   NSError *err = NULL;
+-  params->ret_library = (obj_handle_t)[device newLibraryWithData:(dispatch_data_t)params->data error:&err];
++  dispatch_data_t data = (dispatch_data_t)params->data;
++  if (data && dispatch_data_get_size(data) > 0) {
++    params->ret_library = (obj_handle_t)[device newLibraryWithData:data error:&err];
++  }
++  if (!params->ret_library) {
++    extern const char dxmt_command_source_text[];
++    if (dxmt_command_source_text && dxmt_command_source_text[0]) {
++      NSString *source = [NSString stringWithUTF8String:dxmt_command_source_text];
++      MTLCompileOptions *opts = [[MTLCompileOptions alloc] init];
++      opts.languageVersion = MTLLanguageVersion3_1;
++      params->ret_library = (obj_handle_t)[device newLibraryWithSource:source options:opts error:&err];
++      if (err) {
++        dprintf(STDERR_FILENO, "[iOS DXMT] fallback newLibraryWithSource error: %s\n", err.localizedDescription.UTF8String);
++      } else {
++        dprintf(STDERR_FILENO, "[iOS DXMT] SUCCESS: compiled dxmt_command shader library from source at runtime!\n");
++      }
++    }
++  }
+   params->ret_error = (obj_handle_t)err;
+   return STATUS_SUCCESS;
+ }
