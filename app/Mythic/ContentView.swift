@@ -119,10 +119,13 @@ final class MetalBackedView: UIView {
                       width: max(w, 1), height: max(h, 1))
     }
 
+    override var canBecomeFirstResponder: Bool { true }
+
     override func didMoveToWindow() {
         super.didMoveToWindow()
         guard let w = window else { return }   // detach: leave the host be
         MetalBackedView.keyboardTarget = self  // keyboard button targets the live view
+        _ = self.becomeFirstResponder()
         // SwiftUI ancestors attach gesture recognizers that can delay or
         // cancel raw touch delivery (double-tap timing is exactly what
         // they punish). Defuse them for our subtree.
@@ -247,6 +250,9 @@ final class MetalBackedView: UIView {
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        if !self.isFirstResponder {
+            _ = self.becomeFirstResponder()
+        }
         guard desktopMode else {
             guard let t = touches.first else { return }
             let (x, y) = mapTouch(t)
