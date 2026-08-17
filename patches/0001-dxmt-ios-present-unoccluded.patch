@@ -1,0 +1,48 @@
+diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
+index 7d3796b..b719ddc 100644
+--- a/src/d3d11/d3d11_swapchain.cpp
++++ b/src/d3d11/d3d11_swapchain.cpp
+@@ -762,24 +762,9 @@ public:
+     }
+ 
+     HRESULT hr = S_OK;
+-#ifdef DXMT_IOS
+-    // iOS has no real window manager, so wsi::isMinimized / isForeground
+-    // return meaningless values. Treat the single iOS surface as always
+-    // visible + foregrounded.
+     bool window_minimized = false;
+-#else
+-    bool window_minimized = wsi::isMinimized(hWnd);
+-#endif
+-    if ((window_minimized || desc_.Width == 0 || desc_.Height == 0)
+-        // MSDN: You will not receive DXGI_STATUS_OCCLUDED if you're using a flip model swap chain.
+-        && desc_.SwapEffect <= DXGI_SWAP_EFFECT_SEQUENTIAL)
+-      hr = DXGI_STATUS_OCCLUDED;
+-#ifdef DXMT_IOS
+     bool should_exit_fs = false;
+-#else
+-    bool should_exit_fs = !fullscreen_desc_.Windowed && !window_minimized && !wsi::isForeground(hWnd);
+-#endif
+-    if (hr == S_OK && should_exit_fs)
++    if (desc_.Width == 0 || desc_.Height == 0)
+       hr = DXGI_STATUS_OCCLUDED;
+     if (PresentFlags & DXGI_PRESENT_TEST)
+       return hr;
+diff --git a/src/util/wsi_window_win32.cpp b/src/util/wsi_window_win32.cpp
+index c7cee90..62f23f2 100644
+--- a/src/util/wsi_window_win32.cpp
++++ b/src/util/wsi_window_win32.cpp
+@@ -238,11 +238,11 @@ void updateFullscreenWindow(HMONITOR hMonitor, HWND hWindow,
+ }
+ 
+ bool isForeground(HWND hWindow) {
+-  return ::GetForegroundWindow() == hWindow;
++  return true;
+ }
+ 
+ bool isMinimized(HWND hWindow) {
+-  return ::IsIconic(hWindow);
++  return false;
+ }
+ 
+ } // namespace dxmt::wsi

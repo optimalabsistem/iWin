@@ -59,6 +59,9 @@ workflows:
           export PATH="$(brew --prefix llvm)/bin:$PATH"
           git submodule update --init wine
           git submodule update --init research/dxmt
+          if [ -f patches/0001-dxmt-ios-present-unoccluded.patch ]; then
+            git -C research/dxmt apply ../../patches/0001-dxmt-ios-present-unoccluded.patch || true
+          fi
 
           mkdir -p wine/build-macos/include
           cp build/config_ios_base.h wine/build-macos/include/config.h
