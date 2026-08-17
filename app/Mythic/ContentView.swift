@@ -143,6 +143,7 @@ final class MetalBackedView: UIView {
             host.removeFromSuperview()
             self.addSubview(host)
         }
+        self.bringSubviewToFront(host)
         host.frame = bounds
         host.isHidden = false
         let full = convert(bounds, to: w)
@@ -160,7 +161,14 @@ final class MetalBackedView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        MetalHostView.shared.frame = bounds
+        let host = MetalHostView.shared
+        host.frame = bounds
+        self.bringSubviewToFront(host)
+        let scale = window?.screen.scale ?? UIScreen.main.scale
+        host.metalLayer.drawableSize = CGSize(
+            width: max(bounds.width * scale, 1280),
+            height: max(bounds.height * scale, 720)
+        )
         if let w = window {
             let full = convert(bounds, to: w)
             winios_set_compositor_frame(full.minX, full.minY, full.width, full.height)
@@ -1582,6 +1590,7 @@ struct ContentView: View {
         let parts = desktopResolution.split(separator: "x")
         let w = parts.count == 2 ? (Int(parts[0]) ?? 1280) : 1280
         let h = parts.count == 2 ? (Int(parts[1]) ?? 720) : 720
+        winios_teardown_compositor()
         setenv("MYTHIC_EXE", exeName, 1)
         unsetenv("MYTHIC_ARGS")
         unsetenv("MYTHIC_DESKTOP")
@@ -2414,6 +2423,20 @@ struct ContentView: View {
         guard jit_check_debugged() else {
             logStore.log("JIT not enabled. Press 'Enable JIT' first.", level: .error)
             return
+        }
+
+        // Terminate any stale previous Wine session cleanly
+        if wine_process_is_running() != 0 {
+            logStore.log("Stopping previous Wine session before launch...", level: .info)
+            wine_process_stop()
+            winios_teardown_compositor()
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+
+        // If not in desktop mode, ensure compositor backdrop is removed to expose Metal layer
+        let isDesktop = (getenv("MYTHIC_DESKTOP") != nil && strcmp(getenv("MYTHIC_DESKTOP"), "1") == 0)
+        if !isDesktop {
+            winios_teardown_compositor()
         }
 
         logStore.log("Running full Wine sequence...")

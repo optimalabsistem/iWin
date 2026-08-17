@@ -975,6 +975,8 @@ void wine_process_stop(void) {
     dprintf(STDERR_FILENO, "[WineProc] wine_process_stop requested\n");
     g_wine_running = 0;
     wineserver_stop();
+    extern void winios_teardown_compositor(void);
+    winios_teardown_compositor();
 }
 
 int mythic_write_continue_flag(void) {
