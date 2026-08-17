@@ -84,6 +84,9 @@ compile_cxx() {
 echo "=== winemetal unix (Objective-C) ==="
 compile_objc "$DXMT_SRC/winemetal/unix/winemetal_unix.c" winemetal_unix
 compile_objc "$DXMT_SRC/winemetal/unix/cache.c"          cache
+if [ -f "$DXMT_SRC/dxmt/dxmt_command_source.c" ]; then
+    compile_objc "$DXMT_SRC/dxmt/dxmt_command_source.c" dxmt_command_source
+fi
 
 echo "=== airconv (C++ 20, needs LLVM headers) ==="
 for cpp in airconv_context.cpp air_type.cpp air_signature.cpp air_operations.cpp \
