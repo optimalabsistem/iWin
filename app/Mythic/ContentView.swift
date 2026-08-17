@@ -144,9 +144,10 @@ final class MetalBackedView: UIView {
             self.addSubview(host)
         }
         self.bringSubviewToFront(host)
-        host.frame = bounds
+        let effectiveBounds = (bounds.width > 0 && bounds.height > 0) ? bounds : UIScreen.main.bounds
+        host.frame = effectiveBounds
         host.isHidden = false
-        let full = convert(bounds, to: w)
+        let full = convert(effectiveBounds, to: w)
         winios_set_compositor_frame(full.minX, full.minY, full.width, full.height)
         mythic_display_set_layer(host.metalLayer)
         LogStore.shared.log("MetalLayer registered with DXMT shim", level: .success)
@@ -162,15 +163,16 @@ final class MetalBackedView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         let host = MetalHostView.shared
-        host.frame = bounds
+        let effectiveBounds = (bounds.width > 0 && bounds.height > 0) ? bounds : UIScreen.main.bounds
+        host.frame = effectiveBounds
         self.bringSubviewToFront(host)
         let scale = window?.screen.scale ?? UIScreen.main.scale
         host.metalLayer.drawableSize = CGSize(
-            width: max(bounds.width * scale, 1280),
-            height: max(bounds.height * scale, 720)
+            width: max(effectiveBounds.width * scale, 1280),
+            height: max(effectiveBounds.height * scale, 720)
         )
         if let w = window {
-            let full = convert(bounds, to: w)
+            let full = convert(effectiveBounds, to: w)
             winios_set_compositor_frame(full.minX, full.minY, full.width, full.height)
         }
     }

@@ -42,6 +42,30 @@ index 7d3796b..de3720b 100644
      if (PresentFlags & DXGI_PRESENT_TEST)
        return hr;
  
+diff --git a/src/dxmt/dxmt_command.cpp b/src/dxmt/dxmt_command.cpp
+index 9f9467d..a1b47fc 100644
+--- a/src/dxmt/dxmt_command.cpp
++++ b/src/dxmt/dxmt_command.cpp
+@@ -13,11 +13,15 @@ namespace dxmt {
+ 
+ InternalCommandLibrary::InternalCommandLibrary(WMT::Device device) {
+   WMT::Reference<WMT::Error> error;
+-  library_ = device.newLibrary(dxmt_command, dxmt_command_len, error);
++  if (dxmt_command_len > 0) {
++    library_ = device.newLibrary(dxmt_command, dxmt_command_len, error);
++  }
++  if (!library_) {
++    library_ = device.newLibrary(nullptr, 0, error);
++  }
+ 
+-  if (error) {
+-    ERR("Failed to create internal command library: ", error.description().getUTF8String());
+-    abort();
++  if (!library_) {
++    ERR("Failed to create internal command library: ", error ? error.description().getUTF8String() : "unknown error");
+   }
+ };
+ 
 diff --git a/src/dxmt/dxmt_command_source.c b/src/dxmt/dxmt_command_source.c
 new file mode 100644
 index 0000000..890afe3
@@ -711,10 +735,23 @@ index c7cee90..6e8bffd 100644
  
  } // namespace dxmt::wsi
 diff --git a/src/winemetal/unix/winemetal_unix.c b/src/winemetal/unix/winemetal_unix.c
-index 30cb25d..c436c22 100644
+index 30cb25d..670caf8 100644
 --- a/src/winemetal/unix/winemetal_unix.c
 +++ b/src/winemetal/unix/winemetal_unix.c
-@@ -553,7 +553,24 @@ _MTLDevice_newLibrary(void *obj) {
+@@ -48,11 +48,7 @@ typedef int NTSTATUS;
+ 
+ void
+ execute_on_main(dispatch_block_t block) {
+-  if ([NSThread isMainThread]) {
+-    block();
+-  } else {
+-    dispatch_sync(dispatch_get_main_queue(), block);
+-  }
++  block();
+ }
+ 
+ static NTSTATUS
+@@ -553,7 +549,24 @@ _MTLDevice_newLibrary(void *obj) {
    struct unixcall_mtldevice_newlibrary *params = obj;
    id<MTLDevice> device = (id<MTLDevice>)params->device;
    NSError *err = NULL;
