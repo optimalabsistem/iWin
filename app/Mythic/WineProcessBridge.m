@@ -605,6 +605,22 @@ static void *wine_process_thread(void *arg) {
                 [fm createSymbolicLinkAtPath:[driveCDir stringByAppendingPathComponent:@"shader_cube.hlsl"] withDestinationPath:shaderSrc error:nil];
             }
 
+            // Apply OTA Hot-Patches from Documents/hot_patches/ (if any)
+            NSString *docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
+            NSString *hotPatchDir = [docs stringByAppendingPathComponent:@"hot_patches"];
+            NSString *hotPatchSys32 = [hotPatchDir stringByAppendingPathComponent:@"system32"];
+            if ([fm fileExistsAtPath:hotPatchSys32]) {
+                NSArray *hotFiles = [fm contentsOfDirectoryAtPath:hotPatchSys32 error:nil];
+                for (NSString *hf in hotFiles) {
+                    NSString *hsrc = [hotPatchSys32 stringByAppendingPathComponent:hf];
+                    NSString *hdst = [sys32Dir stringByAppendingPathComponent:hf];
+                    [fm removeItemAtPath:hdst error:nil];
+                    if ([fm copyItemAtPath:hsrc toPath:hdst error:nil]) {
+                        dprintf(STDERR_FILENO, "[WineProc] Applied OTA Hot-Patch: %s -> sys32\n", hf.UTF8String);
+                    }
+                }
+            }
+
             // X3 mixed-mode: also link NON-COLLIDING files from the other
             // bundle arch so cross-arch child exes resolve by Win32 path
             // (e.g. proc-test-x64.exe in an aarch64 desktop session).

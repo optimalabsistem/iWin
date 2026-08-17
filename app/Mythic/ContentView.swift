@@ -964,6 +964,7 @@ struct ContentView: View {
     @AppStorage("remote_log_server") private var remoteLogServer: String = "https://participation-disciplinary-que-carbon.trycloudflare.com/log"
     @State private var serverTestStatus: String = ""
     @State private var isTestingServer: Bool = false
+    @ObservedObject private var patchManager = HotPatchManager.shared
 
     enum JITStatus {
         case unknown
@@ -1255,6 +1256,42 @@ struct ContentView: View {
                 .padding(16)
                 .background(RoundedRectangle(cornerRadius: 14).fill(Color(UIColor.secondarySystemBackground)))
 
+                // Card 0: Live OTA Hot-Patching
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Image(systemName: "bolt.badge.clock.fill")
+                            .font(.title2)
+                            .foregroundColor(.yellow)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Live Hot-Patch / OTA Engine")
+                                .font(.headline)
+                            Text(patchManager.lastSyncStatus)
+                                .font(.caption2.monospaced())
+                                .foregroundColor(patchManager.isSyncing ? .orange : .secondary)
+                        }
+                        Spacer()
+                        if patchManager.isSyncing {
+                            ProgressView()
+                        } else {
+                            Button {
+                                patchManager.syncHotPatches()
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "arrow.triangle.2.circlepath")
+                                    Text("Sync")
+                                        .font(.caption.weight(.bold))
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Capsule().fill(Color.accentColor))
+                                .foregroundColor(.white)
+                            }
+                        }
+                    }
+                }
+                .padding(14)
+                .background(RoundedRectangle(cornerRadius: 14).fill(Color(UIColor.secondarySystemBackground)))
+
                 // Card 1: Windows Desktop
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
@@ -1523,6 +1560,36 @@ struct ContentView: View {
                     Text(serverTestStatus)
                         .font(.caption2.monospaced())
                         .foregroundColor(serverTestStatus.contains("✅") ? .green : .red)
+                }
+            }
+
+            Section(header: Text("Dynamic OTA Live Hot-Patching Engine")) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Hot-Patch Status:")
+                        Spacer()
+                        Text(patchManager.lastSyncStatus)
+                            .font(.caption2.monospaced())
+                            .foregroundColor(patchManager.isSyncing ? .orange : .secondary)
+                    }
+                    if let t = patchManager.lastSyncTime {
+                        Text("Last synced: \(t.formatted(date: .omitted, time: .standard))")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                Button {
+                    patchManager.syncHotPatches()
+                } label: {
+                    HStack {
+                        Image(systemName: "bolt.horizontal.circle.fill")
+                        Text("Check & Sync Hot-Patches Now")
+                        Spacer()
+                        if patchManager.isSyncing {
+                            ProgressView()
+                        }
+                    }
                 }
             }
 

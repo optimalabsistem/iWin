@@ -41,6 +41,39 @@ class LogHTTPHandler(http.server.BaseHTTPRequestHandler):
                     self.wfile.write(f.read())
             else:
                 self.wfile.write(b"No logs yet.")
+        elif self.path == "/api/patch/manifest" or self.path == "/patch/manifest":
+            patch_dir = "/home/admin/mythic/patch_repo"
+            os.makedirs(patch_dir, exist_ok=True)
+            files = []
+            for root, _, filenames in os.walk(patch_dir):
+                for fn in filenames:
+                    fp = os.path.join(root, fn)
+                    rel = os.path.relpath(fp, patch_dir)
+                    files.append({
+                        "name": rel,
+                        "size": os.path.getsize(fp),
+                        "mtime": int(os.path.getmtime(fp))
+                    })
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps({"version": int(time.time()), "files": files}).encode("utf-8"))
+        elif self.path.startswith("/api/patch/download/") or self.path.startswith("/patch/download/"):
+            rel_path = self.path.split("/download/", 1)[1]
+            patch_dir = "/home/admin/mythic/patch_repo"
+            file_path = os.path.normpath(os.path.join(patch_dir, rel_path))
+            if file_path.startswith(patch_dir) and os.path.isfile(file_path):
+                self.send_response(200)
+                self.send_header("Content-Type", "application/octet-stream")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Content-Length", str(os.path.getsize(file_path)))
+                self.end_headers()
+                with open(file_path, "rb") as f:
+                    self.wfile.write(f.read())
+            else:
+                self.send_response(404)
+                self.end_headers()
         else:
             self.send_response(404)
             self.end_headers()
