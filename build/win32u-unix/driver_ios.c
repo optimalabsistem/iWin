@@ -120,13 +120,48 @@ void winios_drv_post_key(unsigned short vk, unsigned int flags)
      * A GAME does notice: Unity reads the keyboard through raw input and
      * DirectInput identifies keys by scan code (DIK_W is 0x11, not 'W'), so
      * W/A/S/D were delivered, accepted with STATUS_SUCCESS, and then discarded
-     * as unidentifiable. That is why the on-screen stick moved nothing.
-     *
-     * MAPVK_VK_TO_VSC_EX returns 0xE0xx for the extended keys — arrows, the nav
-     * cluster, right ctrl/alt, numpad enter and divide. Those MUST carry
-     * KEYEVENTF_EXTENDEDKEY, or a scan-code reader sees the numpad twin
-     * instead: without E0, "up arrow" is numpad 8. */
-    scan = NtUserMapVirtualKeyEx( vk, MAPVK_VK_TO_VSC_EX, NtUserGetKeyboardLayout(0) );
+     * as unidentifiable. That is why the on-screen stick moved nothing. */
+
+    if (flags & 0x0004) {
+        input.type = INPUT_KEYBOARD;
+        input.ki.wVk = 0;
+        input.ki.wScan = vk;
+        input.ki.dwFlags = flags;
+        input.ki.time = 0;
+        input.ki.dwExtraInfo = 0;
+        st = send_hardware_message( NULL, 0, &input, 0 );
+        return;
+    }
+
+    if (vk >= 'A' && vk <= 'Z') {
+        static const unsigned char letters[26] = {
+            0x1E, 0x30, 0x2E, 0x20, 0x12, 0x21, 0x22, 0x23, 0x17, 0x24, 0x25, 0x26, 0x32,
+            0x31, 0x18, 0x19, 0x10, 0x13, 0x1F, 0x14, 0x16, 0x2F, 0x11, 0x2D, 0x15, 0x2C
+        };
+        scan = letters[vk - 'A'];
+    } else if (vk >= '0' && vk <= '9') {
+        static const unsigned char digits[10] = {
+            0x0B, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A
+        };
+        scan = digits[vk - '0'];
+    } else {
+        switch (vk) {
+            case 0x0D: scan = 0x1C; break; // VK_RETURN
+            case 0x20: scan = 0x39; break; // VK_SPACE
+            case 0x08: scan = 0x0E; break; // VK_BACK
+            case 0x09: scan = 0x0F; break; // VK_TAB
+            case 0x1B: scan = 0x01; break; // VK_ESCAPE
+            case 0x10: scan = 0x2A; break; // VK_SHIFT
+            case 0x11: scan = 0x1D; break; // VK_CONTROL
+            case 0x12: scan = 0x38; break; // VK_MENU (Alt)
+            case 0x25: scan = 0xE04B; break; // VK_LEFT
+            case 0x26: scan = 0xE048; break; // VK_UP
+            case 0x27: scan = 0xE04D; break; // VK_RIGHT
+            case 0x28: scan = 0xE050; break; // VK_DOWN
+            case 0x2E: scan = 0xE053; break; // VK_DELETE
+            default: scan = vk & 0xFF; break;
+        }
+    }
     if (scan & 0xe000) flags |= KEYEVENTF_EXTENDEDKEY;
 
     input.type           = INPUT_KEYBOARD;

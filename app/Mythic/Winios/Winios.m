@@ -496,28 +496,26 @@ static void winios_q_push_ev(unsigned int type, int x, int y, unsigned int flags
  * 1024×768 logical surface inside winios_pProcessEvents to match
  * what DXMT swapchains use. */
 void winios_post_touch_down(int x, int y) {
-    fprintf(stderr, "[winios] post_touch_down x=%d y=%d\n", x, y); fflush(stderr);
     winios_q_push_ev(WINIOS_EV_MOUSE, x, y, MOUSEEVENTF_MOVE | MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_ABSOLUTE, 0);
 }
 
 void winios_post_touch_move(int x, int y) {
-    static unsigned cnt;
-    if ((cnt++ % 30) == 0) {
-        fprintf(stderr, "[winios] post_touch_move x=%d y=%d (n=%u)\n", x, y, cnt); fflush(stderr);
-    }
     winios_q_push_ev(WINIOS_EV_MOUSE, x, y, MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE, 0);
 }
 
 void winios_post_touch_up(int x, int y) {
-    fprintf(stderr, "[winios] post_touch_up x=%d y=%d\n", x, y); fflush(stderr);
     winios_q_push_ev(WINIOS_EV_MOUSE, x, y, MOUSEEVENTF_LEFTUP | MOUSEEVENTF_ABSOLUTE, 0);
 }
 
 /* Key press bridge. vk = Windows virtual-key code, down = 1 for press,
  * 0 for release. Queued like mouse events; drained in pProcessEvents. */
 void winios_post_key(int vk, int down) {
-    fprintf(stderr, "[winios] post_key vk=0x%x down=%d\n", vk, down); fflush(stderr);
     winios_q_push_ev(WINIOS_EV_KEY, vk, 0, down ? 0 : KEYEVENTF_KEYUP, 0);
+}
+
+void winios_post_char(unsigned int ch) {
+    winios_q_push_ev(WINIOS_EV_KEY, (int)ch, 0, 0x0004 /* KEYEVENTF_UNICODE */, 0);
+    winios_q_push_ev(WINIOS_EV_KEY, (int)ch, 0, 0x0004 /* KEYEVENTF_UNICODE */ | KEYEVENTF_KEYUP, 0);
 }
 
 BOOL winios_pProcessEvents(DWORD mask) {
@@ -526,18 +524,6 @@ BOOL winios_pProcessEvents(DWORD mask) {
     if (quiet < 0) quiet = getenv("MYTHIC_QUIET") != NULL;
     if ((cnt++ % 240) == 0 && !quiet) {
         fprintf(stderr, "[winios] pProcessEvents called n=%u\n", cnt); fflush(stderr);
-    }
-    /* Desktop debugging: dump the full window tree every ~5s. Runs on
-     * this wine thread (valid TEB — the dump walks win32u internals). */
-    static int desk = -1;
-    if (desk < 0) desk = ({ const char *d = getenv("MYTHIC_DESKTOP"); d && *d == '1'; });
-    if (desk) {
-        static double next_tree_dump;
-        double now = CACurrentMediaTime();
-        if (now >= next_tree_dump) {
-            next_tree_dump = now + 5.0;
-            winios_dump_window_tree();
-        }
     }
     BOOL drained = FALSE;
     for (;;) {
@@ -551,7 +537,6 @@ BOOL winios_pProcessEvents(DWORD mask) {
         g_input_q.tail = (g_input_q.tail + 1) % WINIOS_RING_SIZE;
         pthread_mutex_unlock(&g_input_q.lock);
 
-        fprintf(stderr, "[winios] drain type=%u x=%d y=%d flags=0x%x\n", e.type, e.x, e.y, e.flags); fflush(stderr);
         if (e.type == WINIOS_EV_KEY)
             winios_drv_post_key((unsigned short)e.x, e.flags);
         else
@@ -661,10 +646,22 @@ static void winios_ensure_compositor(void) {
     const char *dm = getenv("MYTHIC_DESKTOP");
     if (!dm || *dm != '1') return;
     UIWindow *win = nil;
-    for (UIWindow *w in UIApplication.sharedApplication.windows) {
-        if (w.isKeyWindow) { win = w; break; }
+    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+        if ([scene isKindOfClass:[UIWindowScene class]]) {
+            UIWindowScene *ws = (UIWindowScene *)scene;
+            for (UIWindow *w in ws.windows) {
+                if (w.isKeyWindow) { win = w; break; }
+            }
+            if (!win) win = ws.windows.firstObject;
+            if (win) break;
+        }
     }
-    if (!win) win = UIApplication.sharedApplication.windows.firstObject;
+    if (!win) {
+        for (UIWindow *w in UIApplication.sharedApplication.windows) {
+            if (w.isKeyWindow) { win = w; break; }
+        }
+        if (!win) win = UIApplication.sharedApplication.windows.firstObject;
+    }
     if (!win) return;
     g_layers = [NSMutableDictionary new];
     g_px_rects = [NSMutableDictionary new];
@@ -682,18 +679,23 @@ static void winios_ensure_compositor(void) {
     winios_layout_compositor();
     fprintf(stderr, "[winios] compositor attached inside presentation frame\n");
     fflush(stderr);
-    /* Wedged-thread triage: sample every thread's stack every 20s from
-     * an app-side timer — keeps firing even when all wine threads are
-     * stuck (unlike the tree dump, which rides wine's event drain). */
-    static dispatch_source_t stack_timer;
-    if (!stack_timer) {
-        stack_timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0,
-                          dispatch_get_global_queue(QOS_CLASS_UTILITY, 0));
-        dispatch_source_set_timer(stack_timer, dispatch_time(DISPATCH_TIME_NOW, 20 * NSEC_PER_SEC),
-                                  20 * NSEC_PER_SEC, NSEC_PER_SEC);
-        dispatch_source_set_event_handler(stack_timer, ^{ ios_dump_all_thread_stacks(); });
-        dispatch_resume(stack_timer);
-    }
+}
+
+void winios_teardown_compositor(void) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (g_compositor_view) {
+            [g_compositor_view removeFromSuperview];
+            g_compositor_view = nil;
+            g_desk_bg = nil;
+            g_layers = nil;
+            g_px_rects = nil;
+            g_surf_sizes = nil;
+            g_metal_layers = nil;
+            g_client_rects = nil;
+            fprintf(stderr, "[winios] compositor torn down cleanly\n");
+            fflush(stderr);
+        }
+    });
 }
 
 /* main thread only */
@@ -1120,37 +1122,6 @@ void winios_surface_present(HWND hwnd, int dx, int dy, int dw, int dh,
         fflush(stderr);
     }
 
-    if (mycnt <= 16 || (mycnt % 200) == 0 ||
-        (sw >= 400 && sh >= 400 && mycnt <= 2000)) {
-        /* ml504: bits pointer + content signature per present.
-         *
-         * ml503 showed ~200k pixels changing across the WHOLE window while
-         * the damage rect claimed a 56x52 spinner — the surface flips
-         * wholesale between two states. This decides where the flip lives:
-         *   bits CONSTANT, sig alternating -> one buffer being rewritten
-         *       with stale content; the defect is upstream in Chromium's
-         *       damage preservation.
-         *   bits ALTERNATING               -> two buffers are reaching us
-         *       and the handoff is ours to fix.
-         * Signature is a sparse FNV over a fixed grid so it is cheap enough
-         * to run on every present and still changes when any region flips. */
-        uint32_t sig = 2166136261u;
-        {
-            const uint8_t *b = (const uint8_t *)bits;
-            int ystep = sh > 64 ? sh / 64 : 1, xstep = sw > 64 ? sw / 64 : 1;
-            for (int y = 0; y < sh; y += ystep) {
-                const uint32_t *row = (const uint32_t *)(b + (size_t)y * stride);
-                for (int x = 0; x < sw; x += xstep) {
-                    sig ^= row[x];
-                    sig *= 16777619u;
-                }
-            }
-        }
-        fprintf(stderr, "[winios] present hwnd=%p #%u dirty=(%d,%d %dx%d) surf=%dx%d "
-                "bits=%p sig=%08x rev=ml504\n",
-                hwnd, mycnt, dx, dy, dw, dh, sw, sh, bits, sig);
-        fflush(stderr);
-    }
     dispatch_async(dispatch_get_main_queue(), ^{
         winios_ensure_compositor();
         if (!g_compositor_view) return;

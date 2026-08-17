@@ -10573,36 +10573,8 @@ void init_syscall_frame( LPTHREAD_START_ROUTINE entry, void *arg, BOOL suspend, 
                 rinfo.protection, rinfo.max_protection);
         }
 
-        /* M8: Ask the debugger to write TEB data to page 0 via BRK #0xf00d cmd 3.
-         * The debugger may have kernel privileges that the app doesn't.
-         * Uses GDB M (memory write) command to write TEB data at address 0. */
         if (!mapped) {
-            ERR("page0: trying debugger (BRK #0xf00d, x16=3)...\n");
-            register uintptr_t x0_val __asm__("x0") = (uintptr_t)teb;
-            register size_t x1_val __asm__("x1") = 0x4000;
-            register uintptr_t x0_result __asm__("x0");
-            __asm__ volatile(
-                "mov x16, #3\n"
-                "brk #0xf00d\n"
-                : "=r"(x0_result)
-                : "r"(x0_val), "r"(x1_val)
-                : "x16", "memory"
-            );
-            ERR("page0 M8 debugger: result=%lu\n", (unsigned long)x0_result);
-            if (x0_result == 1) {
-                /* Verify: read PEB from address 0+offset */
-                uintptr_t teb_off = (uintptr_t)teb - ((uintptr_t)teb & ~0x3FFFULL);
-                uint64_t peb0 = *(volatile uint64_t *)(teb_off + 0x60);
-                uint64_t peb_real = *(volatile uint64_t *)((uintptr_t)teb + 0x60);
-                ERR("page0 M8 verify: peb@0x%lx=%p real=%p %s\n",
-                    (unsigned long)(teb_off + 0x60), (void*)peb0, (void*)peb_real,
-                    peb0 == peb_real ? "MATCH" : "MISMATCH");
-                if (peb0 == peb_real) mapped = 8;
-            }
-        }
-
-        if (!mapped) {
-            ERR("ALL page0 mapping approaches FAILED (including debugger) — relying on Mach handler only\n");
+            ERR("page0 mapping relying on Mach exception handler\n");
         }
     }
     /* Register this thread with the shared Mach exception handler.

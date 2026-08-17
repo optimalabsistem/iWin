@@ -2579,9 +2579,12 @@ static BOOL process_keyboard_message( MSG *msg, UINT hw_id, HWND hwnd_filter,
     }
     msg->pt = point_phys_to_win_dpi( msg->hwnd, msg->pt );
 
+    /* On iOS, do not intercept keystrokes with IME driver callbacks */
+#ifndef WINE_IOS
     if (remove && (msg->message == WM_KEYDOWN || msg->message == WM_KEYUP))
         if (ImmProcessKey( msg->hwnd, NtUserGetKeyboardLayout(0), msg->wParam, msg->lParam, 0 ))
             msg->wParam = VK_PROCESSKEY;
+#endif
 
     return TRUE;
 }
@@ -4086,12 +4089,15 @@ NTSTATUS send_hardware_message( HWND hwnd, UINT flags, const INPUT *input, LPARA
     if (!ret && (flags & SEND_HWMSG_INJECTED) && (prev_x != new_x || prev_y != new_y))
         user_driver->pSetCursorPos( new_x, new_y );
 
+    /* On iOS, never synchronously block the message loop thread on hook replies */
+#ifndef WINE_IOS
     if (wait)
     {
         LRESULT ignored;
         wait_message_reply( 0 );
         retrieve_reply( &info, 0, &ignored );
     }
+#endif
     return ret;
 }
 

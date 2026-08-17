@@ -679,9 +679,12 @@ static void *wine_process_thread(void *arg) {
             
             NSArray *cleanDirs = @[
                 [prefix stringByAppendingPathComponent:@"drive_c/users/Public/Desktop"],
+                [prefix stringByAppendingPathComponent:@"drive_c/users/mythic/Desktop"],
                 [prefix stringByAppendingPathComponent:@"drive_c/users/admin/Desktop"],
                 [prefix stringByAppendingPathComponent:@"drive_c/ProgramData/Microsoft/Windows/Start Menu"],
                 [prefix stringByAppendingPathComponent:@"drive_c/ProgramData/Microsoft/Windows/Start Menu/Programs"],
+                [prefix stringByAppendingPathComponent:@"drive_c/users/mythic/AppData/Roaming/Microsoft/Windows/Start Menu"],
+                [prefix stringByAppendingPathComponent:@"drive_c/users/mythic/AppData/Roaming/Microsoft/Windows/Start Menu/Programs"],
                 [prefix stringByAppendingPathComponent:@"drive_c/users/admin/AppData/Roaming/Microsoft/Windows/Start Menu"],
                 [prefix stringByAppendingPathComponent:@"drive_c/users/admin/AppData/Roaming/Microsoft/Windows/Start Menu/Programs"]
             ];
@@ -689,7 +692,103 @@ static void *wine_process_thread(void *arg) {
                 [fm removeItemAtPath:d error:nil];
                 [fm createDirectoryAtPath:d withIntermediateDirectories:YES attributes:nil error:nil];
             }
-            dprintf(STDERR_FILENO, "[WineProc] Start Menu directories cleared for simple responsive menu\n");
+
+            // Helper lambda/block to generate valid Windows ShellLink (.lnk) files
+            NSData *(^create_lnk)(NSString *, NSString *) = ^NSData *(NSString *targetPath, NSString *args) {
+                NSMutableData *data = [NSMutableData data];
+                uint32_t headerSize = 76;
+                uint8_t clsid[16] = {0x01, 0x14, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46};
+                uint32_t flags = (args && args.length > 0) ? 0x22 : 0x02; // HasLinkInfo | (HasArguments)
+                uint32_t fileAttrs = 0x20;
+                uint64_t times[3] = {0, 0, 0};
+                uint32_t fileSize = 0;
+                uint32_t iconIndex = 0;
+                uint32_t showCmd = 1;
+                uint16_t hotkey = 0, reserved1 = 0;
+                uint32_t reserved2 = 0, reserved3 = 0;
+                
+                [data appendBytes:&headerSize length:4];
+                [data appendBytes:clsid length:16];
+                [data appendBytes:&flags length:4];
+                [data appendBytes:&fileAttrs length:4];
+                [data appendBytes:times length:24];
+                [data appendBytes:&fileSize length:4];
+                [data appendBytes:&iconIndex length:4];
+                [data appendBytes:&showCmd length:4];
+                [data appendBytes:&hotkey length:2];
+                [data appendBytes:&reserved1 length:2];
+                [data appendBytes:&reserved2 length:4];
+                [data appendBytes:&reserved3 length:4];
+                
+                const char *target = [targetPath cStringUsingEncoding:NSASCIIStringEncoding];
+                size_t targetLen = target ? (strlen(target) + 1) : 1;
+                uint32_t linkInfoHdrSize = 28;
+                uint32_t linkInfoFlags = 0x01;
+                uint32_t volIdOff = 0;
+                uint32_t localPathOff = 28;
+                uint32_t netOff = 0;
+                uint32_t suffixOff = (uint32_t)(28 + targetLen - 1);
+                uint32_t totalLinkInfoSize = (uint32_t)(28 + targetLen + 1);
+                
+                [data appendBytes:&totalLinkInfoSize length:4];
+                [data appendBytes:&linkInfoHdrSize length:4];
+                [data appendBytes:&linkInfoFlags length:4];
+                [data appendBytes:&volIdOff length:4];
+                [data appendBytes:&localPathOff length:4];
+                [data appendBytes:&netOff length:4];
+                [data appendBytes:&suffixOff length:4];
+                if (target) [data appendBytes:target length:targetLen];
+                else { uint8_t z = 0; [data appendBytes:&z length:1]; }
+                uint8_t zero = 0;
+                [data appendBytes:&zero length:1];
+                
+                if (args && args.length > 0) {
+                    NSData *argUtf16 = [args dataUsingEncoding:NSUTF16LittleEndianStringEncoding];
+                    uint16_t charCount = (uint16_t)args.length;
+                    [data appendBytes:&charCount length:2];
+                    [data appendData:argUtf16];
+                }
+                
+                uint32_t term = 0;
+                [data appendBytes:&term length:4];
+                return data;
+            };
+
+            // Write handy desktop shortcuts for instant access on the Windows Desktop
+            NSString *mythicDesktop = [prefix stringByAppendingPathComponent:@"drive_c/users/mythic/Desktop"];
+            NSString *adminDesktop = [prefix stringByAppendingPathComponent:@"drive_c/users/admin/Desktop"];
+            NSString *publicDesktop = [prefix stringByAppendingPathComponent:@"drive_c/users/Public/Desktop"];
+            
+            struct {
+                NSString *name;
+                NSString *target;
+                NSString *args;
+            } desktopApps[] = {
+                { @"3D Cube Metal Test", @"C:\\windows\\system32\\cube.exe", @"" },
+                { @"3D Triangle Metal Test", @"C:\\windows\\system32\\triangle.exe", @"" },
+                { @"File Explorer", @"C:\\windows\\system32\\explorer.exe", @"/e,C:\\" },
+                { @"Command Prompt", @"C:\\windows\\system32\\cmd.exe", @"" },
+                { @"Task Manager", @"C:\\windows\\system32\\taskmgr.exe", @"" },
+                { @"Notepad", @"C:\\windows\\system32\\notepad.exe", @"" },
+                { @"Wine Configuration", @"C:\\windows\\system32\\winecfg.exe", @"" },
+                { @"Registry Editor", @"C:\\windows\\system32\\regedit.exe", @"" },
+                { @"Control Panel", @"C:\\windows\\system32\\control.exe", @"" },
+                { @"Minesweeper", @"C:\\windows\\system32\\winemine.exe", @"" }
+            };
+            
+            for (int i = 0; i < sizeof(desktopApps)/sizeof(desktopApps[0]); i++) {
+                NSData *lnkData = create_lnk(desktopApps[i].target, desktopApps[i].args);
+                NSString *lnkName = [NSString stringWithFormat:@"%@.lnk", desktopApps[i].name];
+                NSString *batName = [NSString stringWithFormat:@"%@.bat", desktopApps[i].name];
+                NSString *batCmd = [NSString stringWithFormat:@"@start %@ %@\r\n", desktopApps[i].target, desktopApps[i].args];
+                
+                for (NSString *deskDir in @[mythicDesktop, adminDesktop, publicDesktop]) {
+                    [fm createDirectoryAtPath:deskDir withIntermediateDirectories:YES attributes:nil error:nil];
+                    [lnkData writeToFile:[deskDir stringByAppendingPathComponent:lnkName] atomically:YES];
+                    [batCmd writeToFile:[deskDir stringByAppendingPathComponent:batName] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+                }
+            }
+            dprintf(STDERR_FILENO, "[WineProc] Desktop shortcuts created for all user profiles\n");
         }
 
         // Build the launch path for Wine's PE loader.
@@ -872,6 +971,12 @@ int wine_process_is_running(void) {
     return g_wine_running;
 }
 
+void wine_process_stop(void) {
+    dprintf(STDERR_FILENO, "[WineProc] wine_process_stop requested\n");
+    g_wine_running = 0;
+    wineserver_stop();
+}
+
 int mythic_write_continue_flag(void) {
     if (!g_prefix_path) return -1;
     char path[1024];
@@ -884,4 +989,11 @@ int mythic_write_continue_flag(void) {
     close(fd);
     LOG("continue flag written: %{public}s", path);
     return 0;
+}
+
+// Force strong reference to IOSDisplayShim macdrv symbols so DXMT can dlsym them
+extern void *macdrv_functions;
+__attribute__((used)) static void *mythic_force_macdrv_keep(void) {
+    volatile void *p = (void *)&macdrv_functions;
+    return (void *)p;
 }

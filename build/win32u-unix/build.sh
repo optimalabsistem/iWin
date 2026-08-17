@@ -26,6 +26,7 @@ FAILED_FILES=""
 FREETYPE_DIR="$REPO_ROOT/build/freetype-ios"
 
 FT_INC="$(brew --prefix freetype 2>/dev/null || echo /opt/homebrew/opt/freetype)/include/freetype2"
+[ -d "$FT_INC" ] || FT_INC="/Users/heri/.local/include/freetype2"
 
 compile_one() {
     local src=$1

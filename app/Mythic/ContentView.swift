@@ -29,7 +29,7 @@ final class MetalHostView: UIView {
     // (rotation, re-attach) DXMT would keep presenting to the DEAD layer —
     // black surface both ways (2026-07-05 landscape regression). One host,
     // one layer, forever; only its FRAME is re-parented/resized.
-    static let shared = MetalHostView(frame: CGRect(x: 0, y: 0, width: 800, height: 600))
+    static let shared = MetalHostView(frame: UIScreen.main.bounds)
 
     override class var layerClass: AnyClass { return CAMetalLayer.self }
     var metalLayer: CAMetalLayer { return layer as! CAMetalLayer }
@@ -41,39 +41,18 @@ final class MetalHostView: UIView {
         metalLayer.device = MTLCreateSystemDefaultDevice()
         metalLayer.pixelFormat = .bgra8Unorm
         metalLayer.framebufferOnly = true
-        // 2026-07-03 MeloNX trick: displaySyncEnabled is macOS-public but
-        // exists as PRIVATE API on iOS. Disabling it takes our presents out
-        // of the display-sync scheduling machinery — the thing that has been
-        // silently dropping them (presentedTime==0 on all but occasional
-        // frames) at our sub-1Hz game present cadence. MeloNX (shipping
-        // Switch emulator) sets exactly this pair on its layer.
-        let syncSel = NSSelectorFromString("setDisplaySyncEnabled:")
-        if metalLayer.responds(to: syncSel) {
-            metalLayer.perform(syncSel, with: NSNumber(value: false))
-            LogStore.shared.log("MetalLayer: displaySyncEnabled=false (private API, MeloNX pattern)")
-        }
-        /* ml651: was hardcoded 60, which contradicted everything around it —
-         * FPSOverlay asks the display link for CAFrameRateRange(preferred: 120)
-         * while this declared the surface a 60Hz one. Track the screen instead.
-         *
-         * ⚠️ HYPOTHESIS, NOT A DIAGNOSIS. displaySyncEnabled=false directly above
-         * takes our presents out of display-sync scheduling, so this nominal
-         * value may well be inert. It is one line and it removes a genuine
-         * contradiction; if the A/B shows nothing, the cap is elsewhere and we
-         * have eliminated it rather than argued about it. */
+        metalLayer.isOpaque = true
+
         let fpsSel = NSSelectorFromString("setNominalFramesPerSecond:")
         if metalLayer.responds(to: fpsSel) {
             let hz = UIScreen.main.maximumFramesPerSecond
             metalLayer.perform(fpsSel, with: hz as NSNumber)
-            LogStore.shared.log("MetalLayer: ml651 nominalFPS=\(hz) (was hardcoded 60; "
-                                + "display link asks preferred=120)")
         }
         UIApplication.shared.isIdleTimerDisabled = true
-        // Set once so DXMT's swapchain setup never blocks on a zero-sized
-        // layer. After this, DXMT's setProps is the ONLY drawableSize
-        // writer — per-layout rewrites from the app were a second writer
-        // fighting it (pool churn on every SwiftUI layout pass).
-        metalLayer.drawableSize = CGSize(width: 800, height: 600)
+        let screen = UIScreen.main.bounds.size
+        let scale = UIScreen.main.scale
+        metalLayer.drawableSize = CGSize(width: max(screen.width * scale, 1280), height: max(screen.height * scale, 720))
+        mythic_display_set_layer(metalLayer)
     }
     required init?(coder: NSCoder) { fatalError() }
 }
@@ -88,15 +67,20 @@ final class MetalBackedView: UIView {
     // → WM_KEYDOWN/WM_CHAR). Lets the user type into Windows dialogs (e.g.
     // Run) directly instead of relying on the browse list.
     static weak var keyboardTarget: MetalBackedView?
-    override var canBecomeFirstResponder: Bool { true }
+    private let hiddenInput = WineHiddenInputField(frame: CGRect(x: 0, y: 0, width: 1, height: 1))
+
     static func toggleKeyboard() {
         guard let v = keyboardTarget else { return }
-        if v.isFirstResponder { v.resignFirstResponder() }
-        else { v.becomeFirstResponder() }
+        if v.hiddenInput.isFirstResponder {
+            v.hiddenInput.resignFirstResponder()
+        } else {
+            v.hiddenInput.becomeFirstResponder()
+        }
     }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
+        self.addSubview(hiddenInput)
         // Multi-touch REQUIRED: with it off, a fast double-tap's second
         // touch (landing before the first lift is processed) is silently
         // swallowed — drag-arm never fired (2026-07-06). Two-finger
@@ -160,11 +144,8 @@ final class MetalBackedView: UIView {
         host.isHidden = false
         let full = convert(bounds, to: w)
         winios_set_compositor_frame(full.minX, full.minY, full.width, full.height)
-        if !Self.layerRegistered {
-            Self.layerRegistered = true
-            mythic_display_set_layer(host.metalLayer)
-            LogStore.shared.log("MetalLayer registered with DXMT shim", level: .success)
-        }
+        mythic_display_set_layer(host.metalLayer)
+        LogStore.shared.log("MetalLayer registered with DXMT shim", level: .success)
     }
 
     override func willMove(toWindow newWindow: UIWindow?) {
@@ -403,8 +384,9 @@ final class MetalBackedView: UIView {
         }
         if twoFingerActive {
             if activeTouches(event).isEmpty {
-                if !twoFingerMoved && now - twoFingerStartTime < 0.40
-                    && !InputSettings.shared.relative {   // ml643: see touchesBegan
+                if !twoFingerMoved && now - twoFingerStartTime < 0.45 {
+                    // Trackpad Mode: 2-finger tap = Right Click at current steered cursor position
+                    fputs("[trackpad] 2-finger tap: right click at current cursor\n", stderr)
                     postPointer(F_RDOWN)
                     postPointer(F_RUP)
                 }
@@ -424,18 +406,9 @@ final class MetalBackedView: UIView {
             dragTouch = nil
             return
         }
-        // stationary release before the 0.5s drag threshold = click.
-        // ml643: NOT in relative mode — every small aim adjustment would fire the
-        // weapon. Left/right click are on-screen buttons there instead.
-        if !movedBeyondSlop && now - touchStartTime < 0.5 && !InputSettings.shared.relative {
-            // Direct Touch / Tap: Warp cursor directly to tapped screen coordinates and click!
-            if let t = touches.first {
-                let (tx, ty) = mapTouch(t)
-                Self.cursor.x = CGFloat(tx)
-                Self.cursor.y = CGFloat(ty)
-                postPointer(F_MOVE | F_ABS)
-            }
-            fputs("[trackpad] ended: click at mapped touch\n", stderr)
+        // Trackpad Mode: 1-finger tap (stationary release) = Left Click at CURRENT steered cursor position
+        if !movedBeyondSlop && now - touchStartTime < 0.45 {
+            fputs("[trackpad] 1-finger tap: left click at current steered cursor\n", stderr)
             postPointer(F_LDOWN)
             postPointer(F_LUP)
         }
@@ -608,11 +581,7 @@ struct JoystickFace: View {
     private let knobTravelRatio: CGFloat = 0.30
 
     @ViewBuilder private var interior: some View {
-        if #available(iOS 26.0, *) {
-            Circle().fill(.clear).glassEffect(.regular, in: Circle())
-        } else {
-            Circle().fill(.ultraThinMaterial)
-        }
+        Circle().fill(.ultraThinMaterial)
     }
 
     private func knobOffset(_ d: CGFloat) -> CGSize {
@@ -760,16 +729,42 @@ struct JoystickKeyView: View {
     }
 }
 
-// SwiftUI wrapper around the placeholder view.
-// iOS software-keyboard → Wine key events. Each character is mapped to a
-// US-layout virtual-key (+ shift where needed) and posted as a down/up pair;
-// the message queue's ToUnicode then produces the right WM_CHAR. Paths need
-// the full symbol set (":" "\" "-" "." "_"), so the table is comprehensive.
-extension MetalBackedView: UIKeyInput {
-    var hasText: Bool { false }
+// Dedicated hidden input field to summon the iOS keyboard cleanly without responder interference
+final class WineHiddenInputField: UITextField, UITextFieldDelegate {
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        self.delegate = self
+        self.autocorrectionType = .no
+        self.autocapitalizationType = .none
+        self.spellCheckingType = .no
+        self.smartQuotesType = .no
+        self.smartDashesType = .no
+        self.smartInsertDeleteType = .no
+        self.keyboardType = .asciiCapable
+        self.alpha = 0.01
+        self.isUserInteractionEnabled = true
+    }
+    
+    required init?(coder: NSCoder) { fatalError() }
+    
+    func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {
+        if string.isEmpty {
+            // Backspace key
+            winios_post_key(0x08, 1)
+            winios_post_key(0x08, 0)
+        } else {
+            for ch in string {
+                MetalBackedView.postCharEvent(ch)
+            }
+        }
+        return false
+    }
+}
 
-    // US-keyboard VK + shift for a character. Returns nil for chars we can't map.
-    private static func vkForChar(_ ch: Character) -> (Int32, Bool)? {
+// SwiftUI wrapper around the placeholder view.
+extension MetalBackedView {
+    // US-keyboard VK + shift for a character.
+    static func vkForChar(_ ch: Character) -> (Int32, Bool)? {
         if ch == "\n" || ch == "\r" { return (0x0D, false) }   // VK_RETURN
         if ch == "\t" { return (0x09, false) }                 // VK_TAB
         if ch == " " { return (0x20, false) }                  // VK_SPACE
@@ -798,115 +793,69 @@ extension MetalBackedView: UIKeyInput {
         return table[ch]
     }
 
-    func insertText(_ text: String) {
-        for ch in text {
-            guard let (vk, shift) = MetalBackedView.vkForChar(ch) else { continue }
-            if shift { winios_post_key(0x10, 1) }   // VK_SHIFT down
+    static func postCharEvent(_ ch: Character) {
+        if ch == "\n" || ch == "\r" {
+            winios_post_key(0x0D, 1)
+            winios_post_key(0x0D, 0)
+        } else if ch == "\t" {
+            winios_post_key(0x09, 1)
+            winios_post_key(0x09, 0)
+        } else if ch == "\u{8}" {
+            winios_post_key(0x08, 1)
+            winios_post_key(0x08, 0)
+        } else if let (vk, shift) = vkForChar(ch) {
+            if shift { winios_post_key(0x10, 1) }
             winios_post_key(vk, 1)
             winios_post_key(vk, 0)
-            if shift { winios_post_key(0x10, 0) }    // VK_SHIFT up
+            if shift { winios_post_key(0x10, 0) }
+        } else {
+            for scalar in ch.unicodeScalars {
+                winios_post_char(scalar.value)
+            }
         }
     }
-
-    func deleteBackward() {
-        winios_post_key(0x08, 1)   // VK_BACK down
-        winios_post_key(0x08, 0)
-    }
-
-    // Traits: keep iOS from rewriting path characters.
-    var keyboardType: UIKeyboardType { get { .asciiCapable } set {} }
-    var autocorrectionType: UITextAutocorrectionType { get { .no } set {} }
-    var autocapitalizationType: UITextAutocapitalizationType { get { .none } set {} }
-    var smartQuotesType: UITextSmartQuotesType { get { .no } set {} }
-    var smartDashesType: UITextSmartDashesType { get { .no } set {} }
-    var spellCheckingType: UITextSpellCheckingType { get { .no } set {} }
 
     // Physical Hardware Keyboard (Goojodoq, Magic Keyboard, Bluetooth Keyboards)
-    private func mapUIKeyToVK(_ key: UIKey) -> Int32 {
-        switch key.keyCode {
-        case .keyboardEscape: return 0x1B
-        case .keyboardReturnOrEnter: return 0x0D
-        case .keyboardTab: return 0x09
-        case .keyboardSpacebar: return 0x20
-        case .keyboardDeleteOrBackspace: return 0x08
-        case .keyboardUpArrow: return 0x26
-        case .keyboardDownArrow: return 0x28
-        case .keyboardLeftArrow: return 0x25
-        case .keyboardRightArrow: return 0x27
-        case .keyboardLeftControl, .keyboardRightControl: return 0x11
-        case .keyboardLeftShift, .keyboardRightShift: return 0x10
-        case .keyboardLeftAlt, .keyboardRightAlt: return 0x12
-        case .keyboardLeftGUI, .keyboardRightGUI: return 0x5B
-        case .keyboardF1: return 0x70
-        case .keyboardF2: return 0x71
-        case .keyboardF3: return 0x72
-        case .keyboardF4: return 0x73
-        case .keyboardF5: return 0x74
-        case .keyboardF6: return 0x75
-        case .keyboardF7: return 0x76
-        case .keyboardF8: return 0x77
-        case .keyboardF9: return 0x78
-        case .keyboardF10: return 0x79
-        case .keyboardF11: return 0x7A
-        case .keyboardF12: return 0x7B
-        default: break
-        }
-        if let first = key.charactersIgnoringModifiers.uppercased().first {
-            if let ascii = first.asciiValue {
-                if (ascii >= 0x41 && ascii <= 0x5A) || (ascii >= 0x30 && ascii <= 0x39) {
-                    return Int32(ascii)
-                }
-            }
-            if let (vk, _) = MetalBackedView.vkForChar(first) {
-                return vk
-            }
-        }
-        return 0
-    }
-
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        var handled = false
         for press in presses {
             if let key = press.key {
-                let vk = mapUIKeyToVK(key)
-                if vk != 0 {
-                    winios_post_key(vk, 1)
-                    handled = true
+                let chars = key.characters
+                if key.keyCode == .keyboardDeleteOrBackspace {
+                    winios_post_key(0x08, 1)
+                    winios_post_key(0x08, 0)
+                } else if key.keyCode == .keyboardReturnOrEnter {
+                    winios_post_key(0x0D, 1)
+                    winios_post_key(0x0D, 0)
+                } else if key.keyCode == .keyboardTab {
+                    winios_post_key(0x09, 1)
+                    winios_post_key(0x09, 0)
+                } else if key.keyCode == .keyboardEscape {
+                    winios_post_key(0x1B, 1)
+                    winios_post_key(0x1B, 0)
+                } else if key.keyCode == .keyboardUpArrow {
+                    winios_post_key(0x26, 1)
+                    winios_post_key(0x26, 0)
+                } else if key.keyCode == .keyboardDownArrow {
+                    winios_post_key(0x28, 1)
+                    winios_post_key(0x28, 0)
+                } else if key.keyCode == .keyboardLeftArrow {
+                    winios_post_key(0x25, 1)
+                    winios_post_key(0x25, 0)
+                } else if key.keyCode == .keyboardRightArrow {
+                    winios_post_key(0x27, 1)
+                    winios_post_key(0x27, 0)
+                } else if !chars.isEmpty {
+                    for ch in chars {
+                        MetalBackedView.postCharEvent(ch)
+                    }
                 }
             }
-        }
-        if !handled {
-            super.pressesBegan(presses, with: event)
         }
     }
 
-    override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        var handled = false
-        for press in presses {
-            if let key = press.key {
-                let vk = mapUIKeyToVK(key)
-                if vk != 0 {
-                    winios_post_key(vk, 0)
-                    handled = true
-                }
-            }
-        }
-        if !handled {
-            super.pressesEnded(presses, with: event)
-        }
-    }
+    override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {}
 
-    override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        for press in presses {
-            if let key = press.key {
-                let vk = mapUIKeyToVK(key)
-                if vk != 0 {
-                    winios_post_key(vk, 0)
-                }
-            }
-        }
-        super.pressesCancelled(presses, with: event)
-    }
+    override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {}
 }
 
 /// Pointer settings, persisted to the app container.
@@ -1119,6 +1068,18 @@ struct ContentView: View {
                         Label("Wine Configuration", systemImage: "gearshape.fill")
                     }
 
+                    Button {
+                        launchDirectApp("regedit.exe")
+                    } label: {
+                        Label("Registry Editor", systemImage: "slider.horizontal.3")
+                    }
+
+                    Button {
+                        launchDirectApp("control.exe")
+                    } label: {
+                        Label("Control Panel", systemImage: "switch.2")
+                    }
+
                     Divider()
 
                     Button {
@@ -1202,6 +1163,7 @@ struct ContentView: View {
             .background(Color(UIColor.secondarySystemBackground))
             .zIndex(10)
         }
+        .ignoresSafeArea(.keyboard)
     }
 
     private var launcherTabView: some View {
@@ -1587,6 +1549,15 @@ struct ContentView: View {
         }
     }
 
+    private func stopCurrentWineSession() {
+        logStore.log("Stopping active Wine session...", level: .info)
+        winios_teardown_compositor()
+        selectedTab = .launcher
+        DispatchQueue.global(qos: .userInitiated).async {
+            wine_process_stop()
+        }
+    }
+
     private func launchConfiguredDesktop() {
         let parts = desktopResolution.split(separator: "x")
         let w = parts.count == 2 ? (Int(parts[0]) ?? 1280) : 1280
@@ -1619,13 +1590,10 @@ struct ContentView: View {
         let parts = desktopResolution.split(separator: "x")
         let w = parts.count == 2 ? (Int(parts[0]) ?? 1280) : 1280
         let h = parts.count == 2 ? (Int(parts[1]) ?? 720) : 720
-        setenv("MYTHIC_EXE", exeName, 1)
-        if let a = args, !a.isEmpty {
-            setenv("MYTHIC_ARGS", a, 1)
-        } else {
-            unsetenv("MYTHIC_ARGS")
-        }
-        unsetenv("MYTHIC_DESKTOP")
+        let appCmd = (args != nil && !args!.isEmpty) ? "\(exeName) \(args!)" : exeName
+        setenv("MYTHIC_EXE", "explorer.exe", 1)
+        setenv("MYTHIC_ARGS", "/desktop=shell,\(w)x\(h) C:\\windows\\system32\\\(appCmd)", 1)
+        setenv("MYTHIC_DESKTOP", "1", 1)
         setenv("MYTHIC_SCREEN_W", String(w), 1)
         setenv("MYTHIC_SCREEN_H", String(h), 1)
         unsetenv("MYTHIC_USE_ARM64EC")
@@ -1777,9 +1745,9 @@ struct ContentView: View {
         HStack(spacing: 8) {
             // Live debugger/JIT state, not the (macOS-only, never granted on
             // iOS) allow-jit entitlement the old badge checked.
-            entitlementBadge("JIT", granted: debuggerAttached)
-            entitlementBadge("Memory+", granted: ents.increasedMemory)
-            entitlementBadge("64-bit VA", granted: ents.extendedVA)
+            entitlementBadge(debuggerAttached ? "JIT: Active" : "JIT: Inactive", granted: debuggerAttached)
+            entitlementBadge("Memory+ (Pro)", granted: ents.increasedMemory)
+            entitlementBadge("64-bit VA (Pro)", granted: ents.extendedVA)
             Spacer()
             // Device model rides in this row (the old standalone statusHeader
             // row above it spent ~50pt of vertical space on nothing else).
@@ -2459,6 +2427,9 @@ struct ContentView: View {
         // contention that blocks the main thread RunLoop, triggering iOS hang detection
         ws_log_quiet = 1
 
+        // Pre-register MetalLayer with DXMT so race condition at cold boot cannot see NULL layer
+        mythic_display_set_layer(MetalHostView.shared.metalLayer)
+
         DispatchQueue.global(qos: .userInitiated).async {
             // Step 1: Allocate JIT pool (BRK suspends entire process)
             // 128 MB was enough for cube but Thumper exhausts it (more PE
@@ -2549,11 +2520,11 @@ struct ContentView: View {
             // so it can be swapped between runs without a rebuild, and deleting
             // the file reverts to the proven default. Clamped to sane values --
             // a typo here would otherwise move the VA floor with it.
-            var poolSizeMB = 896
+            var poolSizeMB = checkAppEntitlement("com.apple.developer.kernel.extended-virtual-addressing") ? 896 : 128
             if let d = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
                let txt = try? String(contentsOf: d.appendingPathComponent("mythic-pool.txt"), encoding: .utf8),
                let mb = Int(txt.trimmingCharacters(in: .whitespacesAndNewlines)),
-               mb >= 256, mb <= 1152 {
+               mb >= 64, mb <= 1152 {
                 poolSizeMB = mb
                 logStore.log("JIT pool overridden to \(mb)MB via mythic-pool.txt")
             }
@@ -3210,17 +3181,14 @@ struct TouchControlsOverlay: View {
     }
 }
 
-/// Shared glass backing, with the pre-26 fallback the codebase already uses.
+/// Shared glass backing, with standard ultraThinMaterial.
 struct GlassShape: View {
     var circle = false
     var body: some View {
-        if #available(iOS 26.0, *) {
-            if circle { Circle().fill(.clear).glassEffect(.regular, in: Circle()) }
-            else { RoundedRectangle(cornerRadius: 18).fill(.clear)
-                     .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18)) }
+        if circle {
+            Circle().fill(.ultraThinMaterial)
         } else {
-            if circle { Circle().fill(.ultraThinMaterial) }
-            else { RoundedRectangle(cornerRadius: 18).fill(.ultraThinMaterial) }
+            RoundedRectangle(cornerRadius: 18).fill(.ultraThinMaterial)
         }
     }
 }

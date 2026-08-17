@@ -10,6 +10,52 @@
 #undef DEBUG
 #endif
 
+#include <atomic>
+#include <cstdint>
+#if !defined(__cpp_lib_atomic_ref)
+namespace std {
+template <typename T>
+struct atomic_ref {
+    T* ptr;
+    explicit atomic_ref(T& obj) : ptr(&obj) {}
+    T load(std::memory_order order = std::memory_order_seq_cst) const noexcept {
+        return __c11_atomic_load(reinterpret_cast<_Atomic(T)*>(ptr), static_cast<int>(order));
+    }
+    void store(T desired, std::memory_order order = std::memory_order_seq_cst) const noexcept {
+        __c11_atomic_store(reinterpret_cast<_Atomic(T)*>(ptr), desired, static_cast<int>(order));
+    }
+    T fetch_add(T arg, std::memory_order order = std::memory_order_seq_cst) const noexcept {
+        return __c11_atomic_fetch_add(reinterpret_cast<_Atomic(T)*>(ptr), arg, static_cast<int>(order));
+    }
+    T fetch_sub(T arg, std::memory_order order = std::memory_order_seq_cst) const noexcept {
+        return __c11_atomic_fetch_sub(reinterpret_cast<_Atomic(T)*>(ptr), arg, static_cast<int>(order));
+    }
+    T fetch_or(T arg, std::memory_order order = std::memory_order_seq_cst) const noexcept {
+        return __c11_atomic_fetch_or(reinterpret_cast<_Atomic(T)*>(ptr), arg, static_cast<int>(order));
+    }
+    T fetch_and(T arg, std::memory_order order = std::memory_order_seq_cst) const noexcept {
+        return __c11_atomic_fetch_and(reinterpret_cast<_Atomic(T)*>(ptr), arg, static_cast<int>(order));
+    }
+    bool compare_exchange_strong(T& expected, T desired,
+                                 std::memory_order success = std::memory_order_seq_cst,
+                                 std::memory_order failure = std::memory_order_seq_cst) const noexcept {
+        return __c11_atomic_compare_exchange_strong(reinterpret_cast<_Atomic(T)*>(ptr), &expected, desired,
+                                                    static_cast<int>(success), static_cast<int>(failure));
+    }
+    bool compare_exchange_weak(T& expected, T desired,
+                               std::memory_order success = std::memory_order_seq_cst,
+                               std::memory_order failure = std::memory_order_seq_cst) const noexcept {
+        return __c11_atomic_compare_exchange_weak(reinterpret_cast<_Atomic(T)*>(ptr), &expected, desired,
+                                                  static_cast<int>(success), static_cast<int>(failure));
+    }
+    T exchange(T desired, std::memory_order order = std::memory_order_seq_cst) const noexcept {
+        return __c11_atomic_exchange(reinterpret_cast<_Atomic(T)*>(ptr), desired, static_cast<int>(order));
+    }
+};
+}
+#define __cpp_lib_atomic_ref 201806L
+#endif
+
 #include <FEXCore/Config/Config.h>
 #include <FEXCore/Core/Context.h>
 #include <FEXCore/Core/CoreState.h>
@@ -807,3 +853,49 @@ int64_t fex_test_execute(void) {
     running.store(false);
     return static_cast<int64_t>(exit_code);
 }
+
+extern "C" {
+int ios_fex_mono_take_pending(uint64_t* BlockBegin, uint64_t* HostPC, uint64_t* FaultAddr) {
+    return 0;
+}
+int ios_fex_mono_bridge_armed() {
+    return 0;
+}
+void ios_fex_mono_count_activated() {
+}
+uint64_t ios_fex_mono_captured_count() {
+    return 0;
+}
+void ios_fex_mono_count_helper(int Miss) {
+}
+int rpm_cas_snapshot_take(void* out) {
+    return 0;
+}
+uint64_t IosJitReverseTranslate(uint64_t Addr) { return Addr; }
+void IosFfsBypassLog(uint64_t RIP, uint64_t Entry) {}
+void* IosMonoResolveRW(uint64_t Addr) { return reinterpret_cast<void*>(Addr); }
+
+size_t ZSTD_compress(void* dst, size_t dstCapacity, const void* src, size_t srcSize, int compressionLevel) { return 0; }
+size_t ZSTD_compressBound(size_t srcSize) { return srcSize; }
+size_t ZSTD_decompress(void* dst, size_t dstCapacity, const void* src, size_t compressedSize) { return 0; }
+const char* ZSTD_getErrorName(size_t code) { return "ZSTD not enabled"; }
+unsigned ZSTD_isError(size_t code) { return 0; }
+}
+
+namespace FEXCore::Allocator {
+void* malloc(size_t size) { return ::malloc(size); }
+void free(void* ptr) { ::free(ptr); }
+void* realloc(void* ptr, size_t size) { return ::realloc(ptr, size); }
+void* memalign(size_t alignment, size_t size) {
+    void* ptr = nullptr;
+    ::posix_memalign(&ptr, alignment, size);
+    return ptr;
+}
+void* aligned_alloc(size_t alignment, size_t size) {
+    void* ptr = nullptr;
+    ::posix_memalign(&ptr, alignment, size);
+    return ptr;
+}
+void aligned_free(void* ptr) { ::free(ptr); }
+}
+

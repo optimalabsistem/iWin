@@ -40,6 +40,7 @@ void winios_post_touch_up(int x, int y);
 /* Key press bridge (VK codes: RETURN=0x0D SPACE=0x20 ESCAPE=0x1B).
  * down=1 press, down=0 release. */
 void winios_post_key(int vk, int down);
+void winios_post_char(unsigned int ch);
 
 /* S2 desktop compositor placement. Called by the Swift presentation
  * placeholder (MetalBackedView) with its bounds in UIWindow coords —
@@ -48,6 +49,7 @@ void winios_post_key(int vk, int down);
  * Safe to call before or after the compositor exists; main-thread
  * dispatch inside. */
 void winios_set_compositor_frame(double x, double y, double w, double h);
+void winios_teardown_compositor(void);
 
 /* S2 trackpad pointer. (x, y) are ABSOLUTE wine-desktop pixels (the
  * Swift trackpad engine owns the cursor position); flags are raw

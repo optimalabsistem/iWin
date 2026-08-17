@@ -1830,7 +1830,12 @@ static user_handle_t find_hardware_message_window( struct desktop *desktop, stru
         if (input && !(win = input_shm->focus))
         {
             win = input_shm->active;
-            if (*msg_code < WM_SYSKEYDOWN) *msg_code += WM_SYSKEYDOWN - WM_KEYDOWN;
+            /* Do not promote normal typing keys or VK_PACKET to WM_SYSKEYDOWN unless Alt is genuinely pressed */
+            if (msg->wparam != VK_PACKET && *msg_code < WM_SYSKEYDOWN &&
+                desktop->shared && (desktop->shared->keystate[VK_MENU] & 0x80))
+            {
+                *msg_code += WM_SYSKEYDOWN - WM_KEYDOWN;
+            }
         }
         break;
     case QS_MOUSEMOVE:

@@ -82,12 +82,18 @@ enum StikJITHelper {
     static func allocatePool(poolSize: Int = 128 * 1024 * 1024) -> (rx: UnsafeMutableRawPointer, rw: UnsafeMutableRawPointer, size: Int)? {
         LogStore.shared.log("Allocating \(poolSize / 1024 / 1024)MB JIT pool...")
 
-        // Direct native dual-mapped allocation (Works on SideStore, AltStore, TrollStore, etc.)
-        if let region = jit_region_create(poolSize) {
-            if let rx = jit_region_rx_ptr(region), let rw = jit_region_rw_ptr(region) {
-                let sz = jit_region_size(region)
-                LogStore.shared.log("Native dual-mapped JIT pool created: RX=\(rx), RW=\(rw), size=\(sz / 1024 / 1024)MB", level: .success)
-                return (rx: rx, rw: rw, size: sz)
+        // Direct native dual-mapped allocation (Works on Xcode LLDB, SideStore, AltStore, TrollStore, etc.)
+        var trySizes = [poolSize]
+        if poolSize > 128 * 1024 * 1024 { trySizes.append(128 * 1024 * 1024) }
+        if poolSize > 64 * 1024 * 1024 { trySizes.append(64 * 1024 * 1024) }
+        
+        for sz in trySizes {
+            if let region = jit_region_create(sz) {
+                if let rx = jit_region_rx_ptr(region), let rw = jit_region_rw_ptr(region) {
+                    let actualSz = jit_region_size(region)
+                    LogStore.shared.log("Native dual-mapped JIT pool created: RX=\(rx), RW=\(rw), size=\(actualSz / 1024 / 1024)MB", level: .success)
+                    return (rx: rx, rw: rw, size: actualSz)
+                }
             }
         }
 

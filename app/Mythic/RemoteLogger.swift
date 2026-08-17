@@ -11,7 +11,7 @@ final class RemoteLogger {
     
     var serverURLString: String {
         get {
-            UserDefaults.standard.string(forKey: "remote_log_server") ?? "https://comes-wealth-sink-vast.trycloudflare.com/log"
+            UserDefaults.standard.string(forKey: "remote_log_server") ?? "http://10.92.38.13:8080/log"
         }
         set {
             UserDefaults.standard.set(newValue, forKey: "remote_log_server")
@@ -33,7 +33,10 @@ final class RemoteLogger {
         udpSocket = socket(AF_INET, SOCK_DGRAM, 0)
         guard udpSocket >= 0 else { return }
         
-        var ip = "3.1.51.240"
+        var broadcastEnable: Int32 = 1
+        setsockopt(udpSocket, SOL_SOCKET, SO_BROADCAST, &broadcastEnable, socklen_t(MemoryLayout<Int32>.size))
+        
+        var ip = "10.92.38.13"
         var port: UInt16 = 8080
         
         if let url = URL(string: serverURLString), let host = url.host {
@@ -51,21 +54,23 @@ final class RemoteLogger {
     func send(_ message: String, level: String = "INFO") {
         let text = "[\(level)] \(message)"
         
-        // Fast UDP dispatch
-        if udpSocket >= 0, var addr = serverAddr {
-            let data = Array(text.utf8)
-            data.withUnsafeBytes { ptr in
-                withUnsafePointer(to: &addr) { addrPtr in
-                    let rawAddrPtr = UnsafeRawPointer(addrPtr).assumingMemoryBound(to: sockaddr.self)
-                    sendto(udpSocket, ptr.baseAddress, data.count, 0, rawAddrPtr, socklen_t(MemoryLayout<sockaddr_in>.size))
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            
+            // Fast UDP dispatch
+            if self.udpSocket >= 0, var addr = self.serverAddr {
+                let data = Array(text.utf8)
+                data.withUnsafeBytes { ptr in
+                    withUnsafePointer(to: &addr) { addrPtr in
+                        let rawAddrPtr = UnsafeRawPointer(addrPtr).assumingMemoryBound(to: sockaddr.self)
+                        sendto(self.udpSocket, ptr.baseAddress, data.count, 0, rawAddrPtr, socklen_t(MemoryLayout<sockaddr_in>.size))
+                    }
                 }
             }
-        }
-        
-        // HTTP async dispatch
-        guard let url = URL(string: serverURLString) else { return }
-        queue.async {
-            var req = URLRequest(url: url, timeoutInterval: 3.0)
+            
+            // HTTP async dispatch
+            guard let url = URL(string: self.serverURLString) else { return }
+            var req = URLRequest(url: url, timeoutInterval: 2.0)
             req.httpMethod = "POST"
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
             req.setValue("true", forHTTPHeaderField: "Bypass-Tunnel-Reminder")

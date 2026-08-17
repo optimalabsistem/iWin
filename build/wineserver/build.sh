@@ -181,7 +181,12 @@ echo "=== Renaming colliding symbols in every .o (objcopy sweep) ==="
 # we know collide with win32u-unix, repackage. Affects definitions AND
 # references uniformly, so cross-file calls inside wineserver still
 # resolve. Externals (win32u, etc.) only see the ws_-prefixed names.
-OBJCOPY=$(command -v llvm-objcopy || echo "$(brew --prefix llvm 2>/dev/null || echo /opt/homebrew/opt/llvm)/bin/llvm-objcopy")
+OBJCOPY_BIN=$(command -v llvm-objcopy 2>/dev/null || echo "$(brew --prefix llvm 2>/dev/null || echo /opt/homebrew/opt/llvm)/bin/llvm-objcopy")
+if [ -x "$OBJCOPY_BIN" ] && "$OBJCOPY_BIN" --version >/dev/null 2>&1; then
+    OBJCOPY="$OBJCOPY_BIN"
+else
+    OBJCOPY="python3 $BUILD_DIR/macho_redefine_sym.py"
+fi
 COLLISIONS=(
     alloc_user_handle free_user_handle get_virtual_screen_rect
     destroy_thread_windows get_window_thread is_desktop_class
@@ -203,7 +208,7 @@ TMP_RENAME_DIR="$OBJ_DIR/rename"
 rm -rf "$TMP_RENAME_DIR" && mkdir -p "$TMP_RENAME_DIR"
 (cd "$TMP_RENAME_DIR" && ar x "$OBJ_DIR/libwineserver.a")
 for f in "$TMP_RENAME_DIR"/*.o; do
-    "$OBJCOPY" "${RENAME_ARGS[@]}" "$f"
+    $OBJCOPY "${RENAME_ARGS[@]}" "$f"
 done
 rm "$OBJ_DIR/libwineserver.a"
 ar rcs "$OBJ_DIR/libwineserver.a" "$TMP_RENAME_DIR"/*.o

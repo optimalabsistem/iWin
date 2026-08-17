@@ -186,13 +186,11 @@ int wineserver_is_running(void) {
 void wineserver_stop(void) {
     wine_log_msg("Wineserver stop requested");
     g_wineserver_should_stop = 1;
-    // Join the wineserver thread to ensure it actually stops before we return.
-    // This prevents iOS from killing us for excessive CPU from a spinning wineserver.
     pthread_t t = g_wineserver_thread;
-    if (t) {
-        wine_log_msg("Joining wineserver thread...");
-        pthread_join(t, NULL);
-        wine_log_msg("Wineserver thread joined");
-    }
+    g_wineserver_thread = NULL;
     g_wineserver_running = 0;
+    if (t && !pthread_equal(pthread_self(), t)) {
+        pthread_detach(t);
+    }
+    wine_log_msg("Wineserver stop dispatched");
 }
