@@ -602,22 +602,47 @@ static void *wine_process_thread(void *arg) {
             LOG("Symlinked %d DLLs from %{public}s to %{public}s", linked, bundle_subdir, sys32Dir.UTF8String);
             dprintf(STDERR_FILENO, "[WineProc] Symlinked %d DLLs from %s -> sys32\n", linked, bundle_subdir);
 
-            // Also symlink shader_cube.hlsl to drive_c root for direct execution
+            // Also symlink shader_cube.hlsl to drive_c root, system32, and Documents for direct execution
+            NSString *docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
             NSString *driveCDir = [prefix stringByAppendingPathComponent:@"drive_c"];
             NSString *shaderSrc = [dllSource stringByAppendingPathComponent:@"shader_cube.hlsl"];
             if ([fm fileExistsAtPath:shaderSrc]) {
                 [fm removeItemAtPath:[driveCDir stringByAppendingPathComponent:@"shader_cube.hlsl"] error:nil];
                 [fm createSymbolicLinkAtPath:[driveCDir stringByAppendingPathComponent:@"shader_cube.hlsl"] withDestinationPath:shaderSrc error:nil];
+                [fm removeItemAtPath:[sys32Dir stringByAppendingPathComponent:@"shader_cube.hlsl"] error:nil];
+                [fm createSymbolicLinkAtPath:[sys32Dir stringByAppendingPathComponent:@"shader_cube.hlsl"] withDestinationPath:shaderSrc error:nil];
+                [fm removeItemAtPath:[docs stringByAppendingPathComponent:@"shader_cube.hlsl"] error:nil];
+                [fm createSymbolicLinkAtPath:[docs stringByAppendingPathComponent:@"shader_cube.hlsl"] withDestinationPath:shaderSrc error:nil];
             }
 
-            // Apply OTA Hot-Patches from Documents/hot_patches/ (if any)
-            NSString *docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
+            // Apply OTA Hot-Patches from Documents/hot_patches/ (if any and architecture matches)
             NSString *hotPatchDir = [docs stringByAppendingPathComponent:@"hot_patches"];
             NSString *hotPatchSys32 = [hotPatchDir stringByAppendingPathComponent:@"system32"];
             if ([fm fileExistsAtPath:hotPatchSys32]) {
                 NSArray *hotFiles = [fm contentsOfDirectoryAtPath:hotPatchSys32 error:nil];
                 for (NSString *hf in hotFiles) {
                     NSString *hsrc = [hotPatchSys32 stringByAppendingPathComponent:hf];
+                    // Verify PE machine to prevent ARM64EC <-> AArch64 DLL mismatch
+                    int fd = open(hsrc.UTF8String, O_RDONLY);
+                    uint16_t pe_machine = 0;
+                    if (fd >= 0) {
+                        uint32_t pe_off = 0;
+                        if (lseek(fd, 0x3c, SEEK_SET) == 0x3c && read(fd, &pe_off, 4) == 4) {
+                            lseek(fd, pe_off + 4, SEEK_SET);
+                            read(fd, &pe_machine, 2);
+                        }
+                        close(fd);
+                    }
+                    if (pe_machine != 0) {
+                        if (!use_arm64ec && pe_machine != 0xaa64) {
+                            dprintf(STDERR_FILENO, "[WineProc] Skipping OTA Hot-Patch %s: machine 0x%x != native AArch64 0xaa64\n", hf.UTF8String, pe_machine);
+                            continue;
+                        }
+                        if (use_arm64ec && pe_machine == 0xaa64) {
+                            dprintf(STDERR_FILENO, "[WineProc] Skipping OTA Hot-Patch %s: machine 0xaa64 != ARM64EC session\n", hf.UTF8String);
+                            continue;
+                        }
+                    }
                     NSString *hdst = [sys32Dir stringByAppendingPathComponent:hf];
                     [fm removeItemAtPath:hdst error:nil];
                     if ([fm copyItemAtPath:hsrc toPath:hdst error:nil]) {
@@ -909,6 +934,15 @@ static void *wine_process_thread(void *arg) {
                 dprintf(STDERR_FILENO, "[WineProc] chdir(%s) = %d errno=%d, PWD + MYTHIC_INITIAL_CWD=%s\n",
                         unix_dir, rc, rc ? errno : 0, wine_cwd);
             }
+        } else {
+            /* Bare exe name: C:\windows\system32 */
+            char unix_dir[1024];
+            snprintf(unix_dir, sizeof(unix_dir), "%s/drive_c/windows/system32", g_prefix_path);
+            int rc = chdir(unix_dir);
+            setenv("PWD", unix_dir, 1);
+            setenv("MYTHIC_INITIAL_CWD", "C:\\windows\\system32\\", 1);
+            dprintf(STDERR_FILENO, "[WineProc] chdir(%s) = %d for bare exe %s, PWD + MYTHIC_INITIAL_CWD=C:\\windows\\system32\\\n",
+                    unix_dir, rc, mythic_exe);
         }
 
         // Record this thread so wine_ios_exit knows where to longjmp
