@@ -12034,25 +12034,32 @@ NTSTATUS virtual_create_builtin_view( void *module, const UNICODE_STRING *nt_nam
                 SIZE_T sec_size = sec[i].Misc.VirtualSize ? sec[i].Misc.VirtualSize : sec[i].SizeOfRawData;
                 uintptr_t sec_page = (uintptr_t)((char *)base + sec[i].VirtualAddress) & ~(uintptr_t)host_page_mask;
                 SIZE_T raw_sz = sec[i].SizeOfRawData;
-                if (raw_sz == 0)
-                {
-                    SIZE_T bss_sz = ROUND_SIZE(sec[i].VirtualAddress, sec_size, host_page_mask);
-                    mach_vm_deallocate(mach_task_self(), (mach_vm_address_t)sec_page, bss_sz);
-                    mmap((void *)sec_page, bss_sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
-                }
-                else
-                {
-                    SIZE_T data_map_sz = ROUND_SIZE(sec[i].VirtualAddress, raw_sz, host_page_mask);
-                    mprotect((void *)sec_page, data_map_sz, PROT_READ | PROT_WRITE);
+                SIZE_T data_map_sz = raw_sz ? ROUND_SIZE(sec[i].VirtualAddress, raw_sz, host_page_mask) : 0;
+                uintptr_t bss_p = sec_page + data_map_sz;
+                uintptr_t sec_end = sec_page + ROUND_SIZE(sec[i].VirtualAddress, sec_size, host_page_mask);
 
-                    uintptr_t bss_p = sec_page + data_map_sz;
-                    uintptr_t sec_end = sec_page + ROUND_SIZE(sec[i].VirtualAddress, sec_size, host_page_mask);
-                    if (bss_p < sec_end)
-                    {
-                        SIZE_T bss_sz = sec_end - bss_p;
-                        mach_vm_deallocate(mach_task_self(), (mach_vm_address_t)bss_p, bss_sz);
-                        mmap((void *)bss_p, bss_sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
-                    }
+                if (raw_sz) mprotect((void *)sec_page, data_map_sz, PROT_READ | PROT_WRITE);
+
+                /* ml690: this mmap is page-granular on a 16K host page while PE
+                 * sections are 4K-aligned, so the range can cover bytes owned by
+                 * the NEXT section (and, for raw_sz == 0, the PREVIOUS one).
+                 * Zeroing those is how a loaded image silently loses .rdata/.text
+                 * bytes -- the same defect that left cube.exe on a black screen
+                 * via map_image_into_view. Snapshot and copy back. */
+                if (bss_p < sec_end)
+                {
+                    SIZE_T bss_sz = sec_end - bss_p;
+                    void *save = malloc(bss_sz);
+
+                    if (save) memcpy(save, (void *)bss_p, bss_sz);
+                    mach_vm_deallocate(mach_task_self(), (mach_vm_address_t)bss_p, bss_sz);
+                    if (mmap((void *)bss_p, bss_sz, PROT_READ | PROT_WRITE,
+                             MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0) == MAP_FAILED)
+                        ERR("iOS: builtin BSS mmap FAILED for %.8s page=%p size=0x%lx errno=%d\n",
+                            sec[i].Name, (void *)bss_p, (unsigned long)bss_sz, errno);
+                    else if (save)
+                        memcpy((void *)bss_p, save, bss_sz);
+                    free(save);
                 }
             }
 #endif
