@@ -11242,37 +11242,30 @@ static NTSTATUS map_image_into_view( struct file_view *view, const UNICODE_STRIN
                 sec[si].Name, sec_addr, (unsigned long)sec_size);
             mprotect_exec(sec_addr, sec_size, prot);
         }
-        else if (sec[si].Characteristics & (IMAGE_SCN_MEM_WRITE | IMAGE_SCN_MEM_READ))
+        else if (sec[si].Characteristics & IMAGE_SCN_MEM_WRITE)
         {
+            uintptr_t sec_page = (uintptr_t)sec_addr & ~(uintptr_t)host_page_mask;
+            SIZE_T total_sec_map_sz = ROUND_SIZE(sec[si].VirtualAddress, sec_size, host_page_mask);
             SIZE_T raw_sz = sec[si].PointerToRawData ? min(sec[si].SizeOfRawData, sec_size) : 0;
-            if (raw_sz == 0)
-            {
-                uintptr_t bss_page = (uintptr_t)sec_addr & ~(uintptr_t)host_page_mask;
-                SIZE_T bss_map_size = ROUND_SIZE((uintptr_t)sec_addr, sec_size, host_page_mask);
-                mach_vm_deallocate(mach_task_self(), (mach_vm_address_t)bss_page, bss_map_size);
-                void *mapped = mmap((void *)bss_page, bss_map_size, PROT_READ | PROT_WRITE,
-                                    MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
-                ERR("iOS: allocated pure BSS section %.8s (addr=%p size=0x%lx, mmap=%p)\n",
-                    sec[si].Name, (void *)bss_page, (unsigned long)bss_map_size, mapped);
-            }
-            else
-            {
-                uintptr_t data_page = (uintptr_t)sec_addr & ~(uintptr_t)host_page_mask;
-                SIZE_T data_map_sz = ROUND_SIZE((uintptr_t)sec_addr, raw_sz, host_page_mask);
-                mprotect((void *)data_page, data_map_sz, PROT_READ | PROT_WRITE);
 
-                uintptr_t bss_page = data_page + data_map_sz;
-                uintptr_t sec_end = data_page + ROUND_SIZE((uintptr_t)sec_addr, sec_size, host_page_mask);
-                if (bss_page < sec_end)
+            mach_vm_deallocate(mach_task_self(), (mach_vm_address_t)sec_page, total_sec_map_sz);
+            void *mapped = mmap((void *)sec_page, total_sec_map_sz, PROT_READ | PROT_WRITE,
+                                MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
+            if (mapped != MAP_FAILED)
+            {
+                if (sec[si].PointerToRawData && raw_sz > 0)
                 {
-                    SIZE_T bss_map_size = sec_end - bss_page;
-                    mach_vm_deallocate(mach_task_self(), (mach_vm_address_t)bss_page, bss_map_size);
-                    void *mapped = mmap((void *)bss_page, bss_map_size, PROT_READ | PROT_WRITE,
-                                        MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
-                    ERR("iOS: allocated tail BSS section %.8s (addr=%p size=0x%lx, mmap=%p)\n",
-                        sec[si].Name, (void *)bss_page, (unsigned long)bss_map_size, mapped);
+                    pread(fd, (char *)ptr + sec[si].VirtualAddress, raw_sz, sec[si].PointerToRawData);
                 }
+                ERR("iOS: allocated pure anonymous RW section %.8s (addr=%p size=0x%lx, raw_sz=0x%lx)\n",
+                    sec[si].Name, (void *)sec_page, (unsigned long)total_sec_map_sz, (unsigned long)raw_sz);
             }
+        }
+        else if (sec[si].Characteristics & IMAGE_SCN_MEM_READ)
+        {
+            uintptr_t rdata_page = (uintptr_t)sec_addr & ~(uintptr_t)host_page_mask;
+            SIZE_T rdata_map_sz = ROUND_SIZE(sec[si].VirtualAddress, sec_size, host_page_mask);
+            mprotect((void *)rdata_page, rdata_map_sz, PROT_READ);
         }
     }
 #endif
@@ -12003,17 +11996,17 @@ NTSTATUS virtual_create_builtin_view( void *module, const UNICODE_STRING *nt_nam
                 SIZE_T raw_sz = sec[i].SizeOfRawData;
                 if (raw_sz == 0)
                 {
-                    SIZE_T bss_sz = ROUND_SIZE((uintptr_t)((char *)base + sec[i].VirtualAddress), sec_size, host_page_mask);
+                    SIZE_T bss_sz = ROUND_SIZE(sec[i].VirtualAddress, sec_size, host_page_mask);
                     mach_vm_deallocate(mach_task_self(), (mach_vm_address_t)sec_page, bss_sz);
                     mmap((void *)sec_page, bss_sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
                 }
                 else
                 {
-                    SIZE_T data_map_sz = ROUND_SIZE((uintptr_t)((char *)base + sec[i].VirtualAddress), raw_sz, host_page_mask);
+                    SIZE_T data_map_sz = ROUND_SIZE(sec[i].VirtualAddress, raw_sz, host_page_mask);
                     mprotect((void *)sec_page, data_map_sz, PROT_READ | PROT_WRITE);
 
                     uintptr_t bss_p = sec_page + data_map_sz;
-                    uintptr_t sec_end = sec_page + ROUND_SIZE((uintptr_t)((char *)base + sec[i].VirtualAddress), sec_size, host_page_mask);
+                    uintptr_t sec_end = sec_page + ROUND_SIZE(sec[i].VirtualAddress, sec_size, host_page_mask);
                     if (bss_p < sec_end)
                     {
                         SIZE_T bss_sz = sec_end - bss_p;
