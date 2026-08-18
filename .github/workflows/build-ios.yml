@@ -1,0 +1,139 @@
+name: Build iWin iOS & iPadOS IPA
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 1
+
+      - name: Print macOS & Xcode Info
+        run: |
+          xcodebuild -version
+          sw_vers
+
+      - name: Install Toolchain Dependencies
+        run: |
+          set -e
+          brew install ninja llvm@15 llvm gnutls freetype mingw-w64 meson
+          mkdir -p toolchains
+          if [ ! -d "toolchains/llvm-mingw-20260812-ucrt-macos-universal" ]; then
+            echo "Downloading llvm-mingw release 20260812..."
+            curl -sL https://github.com/mstorsjo/llvm-mingw/releases/download/20260812/llvm-mingw-20260812-ucrt-macos-universal.tar.xz | tar -xJ -C toolchains/
+          fi
+          ( cd toolchains && ln -sfn llvm-mingw-20260812-ucrt-macos-universal llvm-mingw-20260421-ucrt-macos-universal )
+
+      - name: Setup Submodules and Build FEX for iOS
+        run: |
+          set -e
+          export PATH="$(brew --prefix llvm)/bin:$(brew --prefix llvm@15 2>/dev/null || true)/bin:$PATH"
+          git submodule update --init FEX
+          git -C FEX submodule update --init External/fmt External/range-v3 External/unordered_dense External/xxhash External/SoftFloat-3e External/cephes External/jemalloc_glibc
+          
+          if [ -f patches/0001-fex-arm64-nonwin32-virtualquery-fix.patch ]; then
+            git -C FEX apply ../patches/0001-fex-arm64-nonwin32-virtualquery-fix.patch || true
+          fi
+
+          SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+          CC_PATH=$(xcrun -f clang)
+          CXX_PATH=$(xcrun -f clang++)
+
+          cmake -B FEX/build-ios -S FEX \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_SYSTEM_PROCESSOR=arm64 \
+            -DCMAKE_OSX_SYSROOT="$SDK_PATH" \
+            -DCMAKE_C_COMPILER="$CC_PATH" \
+            -DCMAKE_CXX_COMPILER="$CXX_PATH" \
+            -DCMAKE_ASM_COMPILER="$CC_PATH" \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=17.0 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_FLAGS="-DFEX_IOS_HOST=1" \
+            -DCMAKE_CXX_FLAGS="-DFEX_IOS_HOST=1" \
+            -DFEX_IOS_HOST=ON \
+            -DFEX_IOS_HOST_BUILD=ON \
+            -DTUNE_CPU=none \
+            -DTUNE_ARCH=armv8.2-a \
+            -DBUILD_TESTING=False \
+            -DENABLE_LTO=False \
+            -G Ninja
+          
+          ninja -C FEX/build-ios FEXCore FEXCore_Base fmt cephes_128bit xxhash softfloat_3e JemallocLibs
+
+      - name: Build Wine and DXMT Static Libraries for iOS
+        run: |
+          set -e
+          export PATH="$(brew --prefix llvm)/bin:$PATH"
+          git submodule update --init wine
+          git submodule update --init --recursive research/dxmt
+          git -C research/dxmt submodule update --init --recursive
+          if [ -f patches/0001-dxmt-ios-present-unoccluded.patch ]; then
+            git -C research/dxmt apply ../../patches/0001-dxmt-ios-present-unoccluded.patch || true
+          fi
+
+          mkdir -p wine/build-macos/include
+          cp build/config_ios_base.h wine/build-macos/include/config.h
+          cp build/config_ios_base.h wine/include/config.h
+
+          WIDL_BIN=$(command -v widl || command -v x86_64-w64-mingw32-widl || echo "$(brew --prefix mingw-w64 2>/dev/null)/bin/x86_64-w64-mingw32-widl")
+          if [ -x "$WIDL_BIN" ]; then
+            echo "Generating headers from IDL files using WIDL..."
+            for idl in wine/include/*.idl; do
+              hdr="wine/include/$(basename "$idl" .idl).h"
+              if [ ! -f "$hdr" ]; then
+                $WIDL_BIN -h -Iwine/include "$idl" -o "$hdr" 2>/dev/null || true
+              fi
+            done
+          fi
+
+          [ -d "research/freetype" ] || git clone --depth 1 --branch VER-2-13-3 https://github.com/freetype/freetype.git research/freetype
+          chmod +x build/freetype-ios/build.sh build/wineserver/build.sh build/ntdll-unix/build.sh build/win32u-unix/build.sh build/crypto-unix/gen_gnutls_symtab.sh build/dxmt-ios/build.sh
+
+          ./build/freetype-ios/build.sh
+          ./build/wineserver/build.sh all
+          ./build/ntdll-unix/build.sh
+          ./build/win32u-unix/build.sh
+          ./build/dxmt-ios/build.sh
+
+          ls -lh app/Mythic/*.a
+
+      - name: Build iOS Archive (Ad-hoc / Unsigned)
+        run: |
+          xcodebuild archive \
+            -project app/Mythic.xcodeproj \
+            -scheme Mythic \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/Mythic.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES
+
+      - name: Package Payload to IPA & TrollStore TIPA
+        run: |
+          mkdir -p build/Payload
+          cp -r build/Mythic.xcarchive/Products/Applications/Mythic.app build/Payload/
+          cd build
+          zip -r -q iWin.ipa Payload
+          cp iWin.ipa iWin.tipa
+          cd ..
+          ls -lh build/
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iWin-ipa
+          path: |
+            build/iWin.ipa
+            build/iWin.tipa
