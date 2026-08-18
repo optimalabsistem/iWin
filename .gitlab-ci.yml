@@ -10,7 +10,7 @@ build-ios-ipa:
     - sw_vers
     - xcodebuild -version
   script:
-    - brew install ninja llvm@15 llvm gnutls freetype mingw-w64 meson
+    - brew install cmake ninja llvm@15 llvm gnutls freetype mingw-w64 meson
     - mkdir -p toolchains
     - if [ ! -d "toolchains/llvm-mingw-20260812-ucrt-macos-universal" ]; then echo "Downloading llvm-mingw..."; curl -sL https://github.com/mstorsjo/llvm-mingw/releases/download/20260812/llvm-mingw-20260812-ucrt-macos-universal.tar.xz | tar -xJ -C toolchains/; fi
     - ( cd toolchains && ln -sfn llvm-mingw-20260812-ucrt-macos-universal llvm-mingw-20260421-ucrt-macos-universal )
