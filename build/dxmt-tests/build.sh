@@ -69,7 +69,21 @@ EOF
 # --- Build the test PE ---
 echo "==> building ${TEST}.exe"
 CXX="$MINGW/aarch64-w64-mingw32-clang++"
+
+# MYTHIC_SECALIGN16K=1 -> link with 16K section alignment, so no PE section shares
+# an iOS host page (16K) with another one. This is an OFFLINE A/B lever for the
+# ntdll section-fixup class of bug (build/ntdll-unix/virtual_ios.c, ml690): if a
+# test renders correctly only when this is set, the loader is still clobbering
+# bytes that belong to a neighbouring section. Off by default so the shipped test
+# binaries keep the stock layout.
+SECALIGN=""
+if [[ "${MYTHIC_SECALIGN16K:-0}" == "1" ]]; then
+    SECALIGN="-Wl,--section-alignment=0x4000"
+    echo "==> 16K PE section alignment enabled (MYTHIC_SECALIGN16K=1)"
+fi
+
 "$CXX" -o "$OUT/${TEST}.exe" \
+    $SECALIGN \
     -I "$DXMT_DIRECTX" \
     -I "$DIR" \
     -I "$DXMT_TESTS" \

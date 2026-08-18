@@ -11244,28 +11244,68 @@ static NTSTATUS map_image_into_view( struct file_view *view, const UNICODE_STRIN
         }
         else if (sec[si].Characteristics & IMAGE_SCN_MEM_WRITE)
         {
+            /* ml690: SNAPSHOT -> remap -> RESTORE.
+             *
+             * Two defects fixed here, both of which produced a running-but-black
+             * cube.exe (no crash, Present hr=0x0 every frame, nothing drawn):
+             *
+             * 1. This loop runs AFTER process_relocation_block() above, so
+             *    re-reading the section from the file with pread() reverted every
+             *    relocated pointer in .data to its unrelocated ImageBase value.
+             *    That applies to every PE we load, DXMT's d3d11/dxgi included.
+             *
+             * 2. iOS host pages are 16K while PE sections are 4K-aligned, so
+             *    sec_page (floored) and ROUND_SIZE (ceiled) cover bytes owned by
+             *    the PREVIOUS and NEXT sections. mmap(MAP_FIXED|MAP_ANON) zeroed
+             *    them and pread() only restored .data's own bytes -- so the tail
+             *    of .rdata stayed zero. For cube.exe that is exactly where the
+             *    embedded vs/ps DXBC blobs and the vertex/index arrays live (see
+             *    build/dxmt-tests/test_shim.h).
+             *
+             * Snapshotting the whole page range before the remap and copying it
+             * back afterwards preserves relocations, the raw file bytes, Wine's
+             * own zero-fill of the raw tail AND the neighbouring sections in one
+             * step -- which is why the pread() is gone rather than fixed. */
             uintptr_t sec_page = (uintptr_t)sec_addr & ~(uintptr_t)host_page_mask;
             SIZE_T total_sec_map_sz = ROUND_SIZE(sec[si].VirtualAddress, sec_size, host_page_mask);
-            SIZE_T raw_sz = sec[si].PointerToRawData ? min(sec[si].SizeOfRawData, sec_size) : 0;
+            void *save = malloc(total_sec_map_sz);
 
+            if (!save)
+            {
+                ERR("iOS: OOM snapshotting section %.8s (size=0x%lx) - mapping left alone\n",
+                    sec[si].Name, (unsigned long)total_sec_map_sz);
+                continue;
+            }
+            memcpy(save, (void *)sec_page, total_sec_map_sz);
             mach_vm_deallocate(mach_task_self(), (mach_vm_address_t)sec_page, total_sec_map_sz);
             void *mapped = mmap((void *)sec_page, total_sec_map_sz, PROT_READ | PROT_WRITE,
                                 MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
             if (mapped != MAP_FAILED)
             {
-                if (sec[si].PointerToRawData && raw_sz > 0)
-                {
-                    pread(fd, (char *)ptr + sec[si].VirtualAddress, raw_sz, sec[si].PointerToRawData);
-                }
-                ERR("iOS: allocated pure anonymous RW section %.8s (addr=%p size=0x%lx, raw_sz=0x%lx)\n",
-                    sec[si].Name, (void *)sec_page, (unsigned long)total_sec_map_sz, (unsigned long)raw_sz);
+                memcpy((void *)sec_page, save, total_sec_map_sz);
+                /* head_share / tail_share = bytes in this page range that belong
+                 * to the adjacent sections. Non-zero means the old code was
+                 * corrupting them; printed so the negative case is visible too. */
+                ERR("iOS: anonymous RW section %.8s (page=%p size=0x%lx) content preserved,"
+                    " head_share=0x%lx tail_share=0x%lx\n",
+                    sec[si].Name, (void *)sec_page, (unsigned long)total_sec_map_sz,
+                    (unsigned long)((uintptr_t)sec_addr - sec_page),
+                    (unsigned long)((sec_page + total_sec_map_sz) - ((uintptr_t)sec_addr + sec_size)));
             }
+            else
+                ERR("iOS: mmap FAILED for section %.8s (page=%p size=0x%lx) errno=%d\n",
+                    sec[si].Name, (void *)sec_page, (unsigned long)total_sec_map_sz, errno);
+            free(save);
         }
         else if (sec[si].Characteristics & IMAGE_SCN_MEM_READ)
         {
-            uintptr_t rdata_page = (uintptr_t)sec_addr & ~(uintptr_t)host_page_mask;
-            SIZE_T rdata_map_sz = ROUND_SIZE(sec[si].VirtualAddress, sec_size, host_page_mask);
-            mprotect((void *)rdata_page, rdata_map_sz, PROT_READ);
+            /* ml690: only pages FULLY inside this section. A 16K host page shared
+             * with a writable section must keep PROT_WRITE -- otherwise the first
+             * store into .data faults on plain anonymous memory that has no JIT
+             * alias, which mach-heal-page then papers over silently. */
+            uintptr_t start = ((uintptr_t)sec_addr + host_page_mask) & ~(uintptr_t)host_page_mask;
+            uintptr_t end   = ((uintptr_t)sec_addr + sec_size) & ~(uintptr_t)host_page_mask;
+            if (end > start) mprotect((void *)start, end - start, PROT_READ);
         }
     }
 #endif
