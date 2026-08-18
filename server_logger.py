@@ -92,6 +92,29 @@ class LogHTTPHandler(http.server.BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
 
+    def do_HEAD(self):
+        if self.path.startswith("/api/patch/manifest") or self.path.startswith("/patch/manifest"):
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+        elif self.path.startswith("/api/patch/download/") or self.path.startswith("/patch/download/"):
+            rel_path = self.path.split("/download/", 1)[1]
+            patch_dir = "/home/admin/mythic/patch_repo"
+            file_path = os.path.normpath(os.path.join(patch_dir, rel_path))
+            if file_path.startswith(patch_dir) and os.path.isfile(file_path):
+                self.send_response(200)
+                self.send_header("Content-Type", "application/octet-stream")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Content-Length", str(os.path.getsize(file_path)))
+                self.end_headers()
+            else:
+                self.send_response(404)
+                self.end_headers()
+        else:
+            self.send_response(200)
+            self.end_headers()
+
     def do_POST(self):
         length = int(self.headers.get('Content-Length', 0))
         body = self.rfile.read(length).decode('utf-8', errors='replace')

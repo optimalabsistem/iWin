@@ -11248,7 +11248,7 @@ static NTSTATUS map_image_into_view( struct file_view *view, const UNICODE_STRIN
             if (raw_sz == 0)
             {
                 uintptr_t bss_page = (uintptr_t)sec_addr & ~(uintptr_t)host_page_mask;
-                SIZE_T bss_map_size = ROUND_SIZE((uintptr_t)sec_addr, sec_size, host_page_mask) - bss_page;
+                SIZE_T bss_map_size = ROUND_SIZE((uintptr_t)sec_addr, sec_size, host_page_mask);
                 mach_vm_deallocate(mach_task_self(), (mach_vm_address_t)bss_page, bss_map_size);
                 void *mapped = mmap((void *)bss_page, bss_map_size, PROT_READ | PROT_WRITE,
                                     MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
@@ -11258,11 +11258,11 @@ static NTSTATUS map_image_into_view( struct file_view *view, const UNICODE_STRIN
             else
             {
                 uintptr_t data_page = (uintptr_t)sec_addr & ~(uintptr_t)host_page_mask;
-                SIZE_T data_map_sz = ROUND_SIZE((uintptr_t)sec_addr, raw_sz, host_page_mask) - data_page;
+                SIZE_T data_map_sz = ROUND_SIZE((uintptr_t)sec_addr, raw_sz, host_page_mask);
                 mprotect((void *)data_page, data_map_sz, PROT_READ | PROT_WRITE);
 
                 uintptr_t bss_page = data_page + data_map_sz;
-                uintptr_t sec_end = ROUND_SIZE((uintptr_t)sec_addr, sec_size, host_page_mask);
+                uintptr_t sec_end = data_page + ROUND_SIZE((uintptr_t)sec_addr, sec_size, host_page_mask);
                 if (bss_page < sec_end)
                 {
                     SIZE_T bss_map_size = sec_end - bss_page;
@@ -12003,17 +12003,17 @@ NTSTATUS virtual_create_builtin_view( void *module, const UNICODE_STRING *nt_nam
                 SIZE_T raw_sz = sec[i].SizeOfRawData;
                 if (raw_sz == 0)
                 {
-                    SIZE_T bss_sz = ROUND_SIZE((uintptr_t)((char *)base + sec[i].VirtualAddress), sec_size, host_page_mask) - sec_page;
+                    SIZE_T bss_sz = ROUND_SIZE((uintptr_t)((char *)base + sec[i].VirtualAddress), sec_size, host_page_mask);
                     mach_vm_deallocate(mach_task_self(), (mach_vm_address_t)sec_page, bss_sz);
                     mmap((void *)sec_page, bss_sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
                 }
                 else
                 {
-                    SIZE_T data_map_sz = ROUND_SIZE((uintptr_t)((char *)base + sec[i].VirtualAddress), raw_sz, host_page_mask) - sec_page;
+                    SIZE_T data_map_sz = ROUND_SIZE((uintptr_t)((char *)base + sec[i].VirtualAddress), raw_sz, host_page_mask);
                     mprotect((void *)sec_page, data_map_sz, PROT_READ | PROT_WRITE);
 
                     uintptr_t bss_p = sec_page + data_map_sz;
-                    uintptr_t sec_end = ROUND_SIZE((uintptr_t)((char *)base + sec[i].VirtualAddress), sec_size, host_page_mask);
+                    uintptr_t sec_end = sec_page + ROUND_SIZE((uintptr_t)((char *)base + sec[i].VirtualAddress), sec_size, host_page_mask);
                     if (bss_p < sec_end)
                     {
                         SIZE_T bss_sz = sec_end - bss_p;

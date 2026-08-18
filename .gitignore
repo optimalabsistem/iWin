@@ -104,3 +104,9 @@ photorec.se2
 clean-prefix/
 build/x64-tests/asmconf_gen/
 build/x64-tests/asmconf_obj/
+
+# Telegram autonomous loop — secrets + runtime state
+.telegram.env
+HEARTBEAT
+AUTONOMOUS_STATE.json
+logs/

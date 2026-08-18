@@ -33,3 +33,6 @@
   2. Trigger Codemagic build via `https://api.codemagic.io/builds`.
   3. Monitor build with `monitor_build.py` until `FINISHED`.
   4. Provide direct artifact download links to the user.
+
+---
+

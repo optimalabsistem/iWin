@@ -2459,6 +2459,13 @@ static void *ios_mach_exception_thread( void *arg )
                     rw_addr = rw + (fault_addr - rx);
                 } else {
                     rw_addr = ios_jit_anon_alias_lookup(fault_addr);
+                    if (!rw_addr && rx && rw && sz) {
+                        extern void *ios_jit_translate_addr(void *addr);
+                        uintptr_t rx_addr = (uintptr_t)ios_jit_translate_addr((void *)fault_addr);
+                        if (rx_addr != fault_addr && rx_addr >= rx && rx_addr < rx + sz) {
+                            rw_addr = rw + (rx_addr - rx);
+                        }
+                    }
                 }
                 /* ml348 DISCRIMINATOR: a write fault with NO alias is a
                  * different bug from a write fault whose instruction we can't
@@ -2584,8 +2591,19 @@ static void *ios_mach_exception_thread( void *arg )
 
                         /* The WHOLE 32-byte destination must live in the SAME alias, or the
                          * second copy would land outside it. */
-                        uintptr_t rw_end = in_jit ? (uintptr_t)(rw + ((fault_addr + 31) - rx))
-                                                  : (uintptr_t)ios_jit_anon_alias_lookup( fault_addr + 31 );
+                        uintptr_t rw_end = 0;
+                        if (in_jit) {
+                            rw_end = (uintptr_t)(rw + ((fault_addr + 31) - rx));
+                        } else {
+                            rw_end = (uintptr_t)ios_jit_anon_alias_lookup( fault_addr + 31 );
+                            if (!rw_end && rx && rw && sz) {
+                                extern void *ios_jit_translate_addr(void *addr);
+                                uintptr_t rx_end = (uintptr_t)ios_jit_translate_addr((void *)(fault_addr + 31));
+                                if (rx_end != (fault_addr + 31) && rx_end >= rx && rx_end < rx + sz) {
+                                    rw_end = rw + (rx_end - rx);
+                                }
+                            }
+                        }
                         if (!rw_end || rw_end != (uintptr_t)rw_addr + 31)
                         {
                             static int stp_span_n;
