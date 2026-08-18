@@ -2903,75 +2903,57 @@ static void *ios_mach_exception_thread( void *arg )
                      * Wine's PE loader / ARM64EC compiler-generated code triggers this
                      * when initializing data in a page that's been mprotect'd RX-only
                      * on iOS. fault_addr already includes the imm12 offset. */
-                    else if ((insn & 0xffc00000) == 0xf9000000)
+                    /* Load/Store single register (unsigned immediate):
+                     * mask: (insn & 0x3b000000) == 0x39000000
+                     * Covers all LDR/LDRB/LDRH/LDRSB/LDRSH/STR/STRB/STRH and SIMD B/H/S/D/Q variants */
+                    else if ((insn & 0x3b000000) == 0x39000000)
                     {
+                        int size = (insn >> 30) & 0x3;
+                        int is_vector = (insn >> 26) & 0x1;
+                        int is_load = (insn >> 22) & 0x1;
+                        int is_signed = (insn >> 23) & 0x1;
                         int rt = insn & 0x1f;
-                        *(uint64_t *)rw_addr = IOS_STORE_SRC(rt);
-                        emulated = 1;
-                    }
-                    /* GPR STR (immediate, unsigned offset, 32-bit W-reg):
-                     *   1011 1001 00 imm12 Rn Rt   (base 0xb9000000, mask 0xffc00000)
-                     * `*ptr32 = uint32_value` analogue. */
-                    else if ((insn & 0xffc00000) == 0xb9000000)
-                    {
-                        int rt = insn & 0x1f;
-                        *(uint32_t *)rw_addr = (uint32_t)IOS_STORE_SRC(rt);
-                        emulated = 1;
-                    }
-                    /* SIMD/FP STR (immediate, unsigned offset, D-reg): 11 111 1 01 00 imm12 Rn Rt */
-                    else if ((insn & 0xffc00000) == 0xfd000000)
-                    {
-                        int rt = insn & 0x1f;
-                        if (have_neon)
+
+                        if (!is_vector)
                         {
-                            memcpy((void *)rw_addr, &neon_state.__v[rt], 8);
-                            emulated = 1;
+                            if (is_load)
+                            {
+                                if (size == 0) {
+                                    if (rt != 31) state.__x[rt] = is_signed ? (uint64_t)(int64_t)(*(int8_t *)rw_addr) : *(uint8_t *)rw_addr;
+                                } else if (size == 1) {
+                                    if (rt != 31) state.__x[rt] = is_signed ? (uint64_t)(int64_t)(*(int16_t *)rw_addr) : *(uint16_t *)rw_addr;
+                                } else if (size == 2) {
+                                    if (rt != 31) state.__x[rt] = is_signed ? (uint64_t)(int64_t)(*(int32_t *)rw_addr) : *(uint32_t *)rw_addr;
+                                } else if (size == 3) {
+                                    if (rt != 31) state.__x[rt] = *(uint64_t *)rw_addr;
+                                }
+                                emulated = 1;
+                            }
+                            else
+                            {
+                                if (size == 0) *(uint8_t *)rw_addr = (uint8_t)IOS_STORE_SRC(rt);
+                                else if (size == 1) *(uint16_t *)rw_addr = (uint16_t)IOS_STORE_SRC(rt);
+                                else if (size == 2) *(uint32_t *)rw_addr = (uint32_t)IOS_STORE_SRC(rt);
+                                else if (size == 3) *(uint64_t *)rw_addr = IOS_STORE_SRC(rt);
+                                emulated = 1;
+                            }
                         }
-                    }
-                    /* SIMD/FP STR (immediate, unsigned offset, S-reg): 10 111 1 01 00 imm12 Rn Rt */
-                    else if ((insn & 0xffc00000) == 0xbd000000)
-                    {
-                        int rt = insn & 0x1f;
-                        if (have_neon)
+                        else if (have_neon)
                         {
-                            memcpy((void *)rw_addr, &neon_state.__v[rt], 4);
-                            emulated = 1;
-                        }
-                    }
-                    /* SIMD/FP STR (immediate, unsigned offset, Q-reg): 00 111 1 01 10 imm12 Rn Rt */
-                    else if ((insn & 0xffc00000) == 0x3d800000)
-                    {
-                        int rt = insn & 0x1f;
-                        if (have_neon)
-                        {
-                            memcpy((void *)rw_addr, &neon_state.__v[rt], 16);
-                            emulated = 1;
-                        }
-                    }
-                    /* GPR LDR (immediate, unsigned offset, 64-bit X-reg): 1111 1001 01 imm12 Rn Rt */
-                    else if ((insn & 0xffc00000) == 0xf9400000)
-                    {
-                        int rt = insn & 0x1f;
-                        if (rt != 31) state.__x[rt] = *(uint64_t *)rw_addr;
-                        emulated = 1;
-                    }
-                    /* GPR LDR (immediate, unsigned offset, 32-bit W-reg): 1011 1001 01 imm12 Rn Rt */
-                    else if ((insn & 0xffc00000) == 0xb9400000)
-                    {
-                        int rt = insn & 0x1f;
-                        if (rt != 31) state.__x[rt] = *(uint32_t *)rw_addr;
-                        emulated = 1;
-                    }
-                    /* SIMD/FP LDR (immediate, unsigned offset, Q-reg): 00 111 1 01 11 imm12 Rn Rt */
-                    else if ((insn & 0xffc00000) == 0x3dc00000)
-                    {
-                        int rt = insn & 0x1f;
-                        if (have_neon)
-                        {
-                            memcpy(&neon_state.__v[rt], (const void *)rw_addr, 16);
-                            thread_set_state(thread, ARM_NEON_STATE64,
-                                             (thread_state_t)&neon_state, neon_count);
-                            emulated = 1;
+                            int bytes = (size == 0) ? 1 : (size == 1) ? 2 : (size == 2) ? 4 : 8;
+                            if ((insn & 0xffc00000) == 0x3dc00000 || (insn & 0xffc00000) == 0x3d800000) bytes = 16; /* Q-reg */
+                            if (is_load)
+                            {
+                                memcpy(&neon_state.__v[rt], (const void *)rw_addr, bytes);
+                                thread_set_state(thread, ARM_NEON_STATE64,
+                                                 (thread_state_t)&neon_state, neon_count);
+                                emulated = 1;
+                            }
+                            else
+                            {
+                                memcpy((void *)rw_addr, &neon_state.__v[rt], bytes);
+                                emulated = 1;
+                            }
                         }
                     }
                     /* Load/Store single register (unscaled immediate / post-index / pre-index / register offset):
