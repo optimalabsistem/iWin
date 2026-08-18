@@ -2974,24 +2974,68 @@ static void *ios_mach_exception_thread( void *arg )
                             emulated = 1;
                         }
                     }
-                    /* ml350: STRB (register offset): 0011 1000 001 Rm opt S 10 Rn Rt
-                     * (mask 0xffe00c00, val 0x38200800). FEX's own STLRB backpatch
-                     * rewrites to DMB+`strb wN,[xM,xzr]` — chrome_elf writing its
-                     * interception thunk bytes to an anon-RWX page hit this and
-                     * looped (ml349: insn 0x383f68c8). fault_addr is already the
-                     * final address; no base/offset math needed. */
-                    else if ((insn & 0xffe00c00) == 0x38200800)
+                    /* Load/Store single register (unscaled immediate / post-index / pre-index / register offset):
+                     * mask: (insn & 0x3b000000) == 0x38000000
+                     * Covers LDUR/STUR (e.g. 0xb85f012a LDUR W10, [X9, #-16]) and all related unscaled/indexed variants */
+                    else if ((insn & 0x3b000000) == 0x38000000)
                     {
+                        int size = (insn >> 30) & 0x3;
+                        int is_vector = (insn >> 26) & 0x1;
+                        int is_load = (insn >> 22) & 0x1;
+                        int is_signed = (insn >> 23) & 0x1;
                         int rt = insn & 0x1f;
-                        *(uint8_t *)rw_addr = (uint8_t)IOS_STORE_SRC(rt);
-                        emulated = 1;
-                    }
-                    /* ml350: STRH (register offset): 0111 1000 001 ... (val 0x78200800) */
-                    else if ((insn & 0xffe00c00) == 0x78200800)
-                    {
-                        int rt = insn & 0x1f;
-                        *(uint16_t *)rw_addr = (uint16_t)IOS_STORE_SRC(rt);
-                        emulated = 1;
+                        int rn = (insn >> 5) & 0x1f;
+                        int idx_mode = (insn >> 10) & 0x3;
+
+                        if (!is_vector)
+                        {
+                            if (is_load)
+                            {
+                                if (size == 0) {
+                                    if (rt != 31) state.__x[rt] = is_signed ? (uint64_t)(int64_t)(*(int8_t *)rw_addr) : *(uint8_t *)rw_addr;
+                                } else if (size == 1) {
+                                    if (rt != 31) state.__x[rt] = is_signed ? (uint64_t)(int64_t)(*(int16_t *)rw_addr) : *(uint16_t *)rw_addr;
+                                } else if (size == 2) {
+                                    if (rt != 31) state.__x[rt] = is_signed ? (uint64_t)(int64_t)(*(int32_t *)rw_addr) : *(uint32_t *)rw_addr;
+                                } else if (size == 3) {
+                                    if (rt != 31) state.__x[rt] = *(uint64_t *)rw_addr;
+                                }
+                                emulated = 1;
+                            }
+                            else
+                            {
+                                if (size == 0) *(uint8_t *)rw_addr = (uint8_t)IOS_STORE_SRC(rt);
+                                else if (size == 1) *(uint16_t *)rw_addr = (uint16_t)IOS_STORE_SRC(rt);
+                                else if (size == 2) *(uint32_t *)rw_addr = (uint32_t)IOS_STORE_SRC(rt);
+                                else if (size == 3) *(uint64_t *)rw_addr = IOS_STORE_SRC(rt);
+                                emulated = 1;
+                            }
+                        }
+                        else if (have_neon)
+                        {
+                            int bytes = (size == 0) ? 1 : (size == 1) ? 2 : (size == 2) ? 4 : 8;
+                            if ((insn & 0xffc00000) == 0x3cc00000 || (insn & 0xffc00000) == 0x3c800000) bytes = 16; /* Q-reg */
+                            if (is_load)
+                            {
+                                memcpy(&neon_state.__v[rt], (const void *)rw_addr, bytes);
+                                thread_set_state(thread, ARM_NEON_STATE64,
+                                                 (thread_state_t)&neon_state, neon_count);
+                                emulated = 1;
+                            }
+                            else
+                            {
+                                memcpy((void *)rw_addr, &neon_state.__v[rt], bytes);
+                                emulated = 1;
+                            }
+                        }
+
+                        /* Writeback for pre/post-indexed addressing */
+                        if (emulated && (idx_mode == 1 || idx_mode == 3))
+                        {
+                            int imm9 = (insn >> 12) & 0x1ff;
+                            if (imm9 & 0x100) imm9 |= ~0x1ff;
+                            if (rn != 31) state.__x[rn] = (uint64_t)((int64_t)state.__x[rn] + imm9);
+                        }
                     }
                     
 
