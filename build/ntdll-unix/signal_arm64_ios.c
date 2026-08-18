@@ -2579,9 +2579,10 @@ static void *ios_mach_exception_thread( void *arg )
                      *
                      * STP Q is not architecturally one atomic 32-byte transaction, so two
                      * 16-byte copies are correct. Rn==31 is SP, never __x[31]. */
-                    if (have_neon && (insn & 0xFE400000) == 0xAC000000)
+                    if (have_neon && (insn & 0xFE000000) == 0xAC000000)
                     {
-                        const int mode = (insn >> 23) & 0x3; /* 0 stnp, 1 post, 2 offset, 3 pre */
+                        const int is_load = (insn >> 22) & 1; /* L bit: 0=store, 1=load (e.g. LDNP/LDP in memmove) */
+                        const int mode = (insn >> 23) & 0x3; /* 0 stnp/ldnp, 1 post, 2 offset, 3 pre */
                         const int rt   = insn & 0x1f;
                         const int rt2  = (insn >> 10) & 0x1f;
                         const int rn   = (insn >> 5) & 0x1f;
@@ -2621,8 +2622,18 @@ static void *ios_mach_exception_thread( void *arg )
                             uint64_t base_new = base_old;
                             int wb = (mode == 1 || mode == 3);
 
-                            memcpy((void *)rw_addr, &neon_state.__v[rt], 16);
-                            memcpy((void *)(rw_addr + 16), &neon_state.__v[rt2], 16);
+                            if (is_load)
+                            {
+                                memcpy(&neon_state.__v[rt], (const void *)rw_addr, 16);
+                                memcpy(&neon_state.__v[rt2], (const void *)(rw_addr + 16), 16);
+                                thread_set_state(thread, ARM_NEON_STATE64,
+                                                 (thread_state_t)&neon_state, neon_count);
+                            }
+                            else
+                            {
+                                memcpy((void *)rw_addr, &neon_state.__v[rt], 16);
+                                memcpy((void *)(rw_addr + 16), &neon_state.__v[rt2], 16);
+                            }
 
                             if (wb)
                             {
@@ -2635,11 +2646,11 @@ static void *ios_mach_exception_thread( void *arg )
                                 static int stp_n;
                                 if (stp_n < 8)
                                     dprintf(STDERR_FILENO,
-                                        "[stp-emul] ml629 #%d insn=0x%08x mode=%s off=%+lld Rt=q%d Rt2=q%d "
+                                        "[stp-emul] ml629 #%d insn=0x%08x mode=%s off=%+lld %s=q%d Rt2=q%d "
                                         "Rn=%s%d addr=0x%llx rw=0x%llx base 0x%llx -> 0x%llx%s\n",
                                         ++stp_n, insn,
-                                        mode == 0 ? "stnp" : mode == 1 ? "post" : mode == 2 ? "offset" : "pre",
-                                        (long long)off, rt, rt2, rn == 31 ? "s" : "x", rn,
+                                        mode == 0 ? (is_load ? "ldnp" : "stnp") : mode == 1 ? "post" : mode == 2 ? "offset" : "pre",
+                                        (long long)off, is_load ? "Ld" : "Rt", rt, rt2, rn == 31 ? "s" : "x", rn,
                                         (unsigned long long)fault_addr, (unsigned long long)rw_addr,
                                         (unsigned long long)base_old, (unsigned long long)base_new,
                                         wb ? " (writeback)" : " (no writeback)");
@@ -2934,6 +2945,32 @@ static void *ios_mach_exception_thread( void *arg )
                         if (have_neon)
                         {
                             memcpy((void *)rw_addr, &neon_state.__v[rt], 16);
+                            emulated = 1;
+                        }
+                    }
+                    /* GPR LDR (immediate, unsigned offset, 64-bit X-reg): 1111 1001 01 imm12 Rn Rt */
+                    else if ((insn & 0xffc00000) == 0xf9400000)
+                    {
+                        int rt = insn & 0x1f;
+                        if (rt != 31) state.__x[rt] = *(uint64_t *)rw_addr;
+                        emulated = 1;
+                    }
+                    /* GPR LDR (immediate, unsigned offset, 32-bit W-reg): 1011 1001 01 imm12 Rn Rt */
+                    else if ((insn & 0xffc00000) == 0xb9400000)
+                    {
+                        int rt = insn & 0x1f;
+                        if (rt != 31) state.__x[rt] = *(uint32_t *)rw_addr;
+                        emulated = 1;
+                    }
+                    /* SIMD/FP LDR (immediate, unsigned offset, Q-reg): 00 111 1 01 11 imm12 Rn Rt */
+                    else if ((insn & 0xffc00000) == 0x3dc00000)
+                    {
+                        int rt = insn & 0x1f;
+                        if (have_neon)
+                        {
+                            memcpy(&neon_state.__v[rt], (const void *)rw_addr, 16);
+                            thread_set_state(thread, ARM_NEON_STATE64,
+                                             (thread_state_t)&neon_state, neon_count);
                             emulated = 1;
                         }
                     }
