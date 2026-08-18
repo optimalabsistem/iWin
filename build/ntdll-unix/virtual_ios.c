@@ -12031,36 +12031,68 @@ NTSTATUS virtual_create_builtin_view( void *module, const UNICODE_STRING *nt_nam
 #ifdef WINE_IOS
             if (sec[i].Characteristics & IMAGE_SCN_MEM_WRITE)
             {
+                /* ml691: a builtin's writable sections must become REAL anonymous
+                 * RW memory. mprotect() -- which is all the raw-data part used to
+                 * get here -- CANNOT add write access to debugger-blessed pool
+                 * memory: it returns EACCES unconditionally (ml133, see
+                 * signal_arm64_ios.c). So .data stayed RX-only, every store into
+                 * it took a Mach exception, and cube.exe parked on the very first
+                 * one: watchdog PC frozen at 0x128090c90 with x8=0x14003a9d8,
+                 * mach msgs=1 (one exception, never completed), presents=0 for the
+                 * whole 60s run. Nothing downstream -- shaders, swapchain, layer --
+                 * ever got a chance to run.
+                 *
+                 * Remap page by page through a fixed 16K buffer rather than
+                 * snapshotting the whole section: content is preserved (including
+                 * bytes of a neighbouring section sharing an edge page, because iOS
+                 * host pages are 16K while PE sections are 4K-aligned) with no
+                 * section-sized allocation, which matters at a 4096MB jetsam
+                 * ceiling. The buffer is safe as a static: this runs under
+                 * virtual_mutex.
+                 *
+                 * The snapshot goes through mach_vm_read_overwrite (a syscall) so
+                 * a page that is not readable is SKIPPED and reported, instead of
+                 * faulting the loader itself the way a plain memcpy would. */
                 SIZE_T sec_size = sec[i].Misc.VirtualSize ? sec[i].Misc.VirtualSize : sec[i].SizeOfRawData;
                 uintptr_t sec_page = (uintptr_t)((char *)base + sec[i].VirtualAddress) & ~(uintptr_t)host_page_mask;
-                SIZE_T raw_sz = sec[i].SizeOfRawData;
-                SIZE_T data_map_sz = raw_sz ? ROUND_SIZE(sec[i].VirtualAddress, raw_sz, host_page_mask) : 0;
-                uintptr_t bss_p = sec_page + data_map_sz;
                 uintptr_t sec_end = sec_page + ROUND_SIZE(sec[i].VirtualAddress, sec_size, host_page_mask);
+                SIZE_T host_page = (SIZE_T)host_page_mask + 1;
+                static unsigned char save_page[16384];
+                unsigned ok = 0, failed = 0, skipped = 0;
+                uintptr_t p;
 
-                if (raw_sz) mprotect((void *)sec_page, data_map_sz, PROT_READ | PROT_WRITE);
-
-                /* ml690: this mmap is page-granular on a 16K host page while PE
-                 * sections are 4K-aligned, so the range can cover bytes owned by
-                 * the NEXT section (and, for raw_sz == 0, the PREVIOUS one).
-                 * Zeroing those is how a loaded image silently loses .rdata/.text
-                 * bytes -- the same defect that left cube.exe on a black screen
-                 * via map_image_into_view. Snapshot and copy back. */
-                if (bss_p < sec_end)
+                if (host_page > sizeof(save_page))
                 {
-                    SIZE_T bss_sz = sec_end - bss_p;
-                    void *save = malloc(bss_sz);
-
-                    if (save) memcpy(save, (void *)bss_p, bss_sz);
-                    mach_vm_deallocate(mach_task_self(), (mach_vm_address_t)bss_p, bss_sz);
-                    if (mmap((void *)bss_p, bss_sz, PROT_READ | PROT_WRITE,
-                             MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0) == MAP_FAILED)
-                        ERR("iOS: builtin BSS mmap FAILED for %.8s page=%p size=0x%lx errno=%d\n",
-                            sec[i].Name, (void *)bss_p, (unsigned long)bss_sz, errno);
-                    else if (save)
-                        memcpy((void *)bss_p, save, bss_sz);
-                    free(save);
+                    ERR("iOS: host page 0x%lx exceeds snapshot buffer - leaving %.8s alone\n",
+                        (unsigned long)host_page, sec[i].Name);
                 }
+                else for (p = sec_page; p < sec_end; p += host_page)
+                {
+                    mach_vm_size_t got = 0;
+
+                    if (mach_vm_read_overwrite(mach_task_self(), (mach_vm_address_t)p, host_page,
+                                               (mach_vm_address_t)save_page, &got) != KERN_SUCCESS ||
+                        got != host_page)
+                    {
+                        skipped++;
+                        continue;
+                    }
+                    mach_vm_deallocate(mach_task_self(), (mach_vm_address_t)p, host_page);
+                    if (mmap((void *)p, host_page, PROT_READ | PROT_WRITE,
+                             MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0) == MAP_FAILED)
+                    {
+                        failed++;
+                        continue;
+                    }
+                    memcpy((void *)p, save_page, host_page);
+                    ok++;
+                }
+                /* Both outcomes printed: a silent line here used to mean either
+                 * "nothing to do" or "mprotect quietly refused", which is exactly
+                 * the ambiguity that hid this bug. */
+                ERR("iOS: builtin section %.8s (page=%p size=0x%lx) -> anon RW: %u ok, %u mmap-failed, %u unreadable\n",
+                    sec[i].Name, (void *)sec_page, (unsigned long)(sec_end - sec_page),
+                    ok, failed, skipped);
             }
 #endif
         }
