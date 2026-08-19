@@ -352,6 +352,9 @@ static void fatal_error( const char *err, ... )
     char buf[1024];
     va_start( args, err ); vsnprintf( buf, sizeof(buf), err, args ); va_end( args );
     os_log_error( OS_LOG_DEFAULT, "[Wine ntdll/server] FATAL: %{public}s", buf );
+    wine_log_write("[Wine ntdll/server] FATAL: %s", buf);
+    fprintf( stderr, "[Wine ntdll/server] FATAL: %s\n", buf );
+    fflush( stderr );
     pthread_exit( NULL );
 #else
     va_list args;
@@ -2538,6 +2541,8 @@ size_t server_init_process(void)
     /* First process only (children use server_init_process_child), so the DOS
      * drive objects are published exactly once, before the shell enumerates. */
     ios_create_drive_symlinks();
+    wine_log_write("[Wine init_process] current_machine=%04x supported_count=%d native=%04x",
+                   current_machine, (int)supported_machines_count, native_machine);
 #endif
 
     for (i = 0; i < supported_machines_count; i++)

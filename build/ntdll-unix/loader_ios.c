@@ -145,6 +145,9 @@ static void fatal_error( const char *err, ... )
     vsnprintf( buf, sizeof(buf), err, args );
     va_end( args );
     os_log_error( OS_LOG_DEFAULT, "[Wine ntdll] FATAL: %{public}s", buf );
+    wine_log_write("[Wine ntdll] FATAL: %s", buf);
+    fprintf( stderr, "[Wine ntdll] FATAL: %s\n", buf );
+    fflush( stderr );
     pthread_exit( NULL );
 #else
     fprintf( stderr, "wine: " );
@@ -2597,7 +2600,12 @@ static ULONG_PTR get_image_address(void)
 static void start_main_thread(void)
 {
 #ifdef WINE_IOS
-#define WINE_IOS_LOG(msg) do { os_log(OS_LOG_DEFAULT, "[Wine init] " msg); } while(0)
+#define WINE_IOS_LOG(msg) do { \
+    os_log(OS_LOG_DEFAULT, "[Wine init] " msg); \
+    wine_log_write("[Wine init] " msg); \
+    fprintf(stderr, "[Wine init] " msg "\n"); \
+    fflush(stderr); \
+} while(0)
 #else
 #define WINE_IOS_LOG(msg)
 #endif
