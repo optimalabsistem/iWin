@@ -823,7 +823,7 @@ index 30cb25d..040ada0 100644
  
    return STATUS_SUCCESS;
 diff --git a/tests/dx11/dx11_cube.cpp b/tests/dx11/dx11_cube.cpp
-index 000d75a..ca2fbe3 100644
+index 000d75a..5a7a796 100644
 --- a/tests/dx11/dx11_cube.cpp
 +++ b/tests/dx11/dx11_cube.cpp
 @@ -8,19 +8,9 @@
@@ -918,6 +918,15 @@ index 000d75a..ca2fbe3 100644
  
      UINT shaderCompileFlags = 0;
      // Compiling with this flag allows debugging shaders with Visual Studio
+@@ -685,7 +686,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
+         constants->modelViewProj = modelViewProj;
+         d3d11DeviceContext->Unmap(constantBuffer, 0);
+ 
+-        FLOAT backgroundColor[4] = { 0.1f, 0.2f, 0.6f, 1.0f };
++        FLOAT backgroundColor[4] = { 0.1f, 0.35f, 0.95f, 1.0f };
+         d3d11DeviceContext->ClearRenderTargetView(d3d11FrameBufferView, backgroundColor);
+         
+         d3d11DeviceContext->ClearDepthStencilView(depthBufferView, D3D11_CLEAR_DEPTH, 1.0f, 0);
 @@ -779,7 +780,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
              }
          }

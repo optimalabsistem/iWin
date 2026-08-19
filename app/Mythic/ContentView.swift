@@ -39,6 +39,8 @@ final class MetalHostView: UIView {
         isUserInteractionEnabled = false   // touches fall through to SwiftUI
         backgroundColor = .clear
         contentScaleFactor = UIScreen.main.scale
+        layer.zPosition = 999
+        metalLayer.zPosition = 999
         metalLayer.device = MTLCreateSystemDefaultDevice()
         metalLayer.pixelFormat = .bgra8Unorm
         metalLayer.framebufferOnly = false
@@ -149,6 +151,8 @@ final class MetalBackedView: UIView {
         let effectiveBounds = (bounds.width > 0 && bounds.height > 0) ? bounds : UIScreen.main.bounds
         host.frame = effectiveBounds
         host.metalLayer.frame = host.bounds
+        host.layer.zPosition = 999
+        host.metalLayer.zPosition = 999
         host.isHidden = false
         self.bringSubviewToFront(host)
         let full = convert(effectiveBounds, to: w)
@@ -170,6 +174,8 @@ final class MetalBackedView: UIView {
         let effectiveBounds = (bounds.width > 0 && bounds.height > 0) ? bounds : UIScreen.main.bounds
         host.frame = effectiveBounds
         host.metalLayer.frame = host.bounds
+        host.layer.zPosition = 999
+        host.metalLayer.zPosition = 999
         self.bringSubviewToFront(host)
         let scale = window?.screen.scale ?? UIScreen.main.scale
         host.metalLayer.drawableSize = CGSize(
@@ -1145,7 +1151,6 @@ struct ContentView: View {
             .padding(.vertical, 4)
 
             ZStack {
-                Color.black
                 MythicMetalView()
             }
             .frame(maxHeight: .infinity)
