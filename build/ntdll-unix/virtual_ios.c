@@ -11244,58 +11244,81 @@ static NTSTATUS map_image_into_view( struct file_view *view, const UNICODE_STRIN
         }
         else if (sec[si].Characteristics & IMAGE_SCN_MEM_WRITE)
         {
-            /* ml690: SNAPSHOT -> remap -> RESTORE.
+            /* ml690 & ml692: SNAPSHOT -> remap -> RESTORE with kernel validation & fail-fast.
              *
-             * Two defects fixed here, both of which produced a running-but-black
-             * cube.exe (no crash, Present hr=0x0 every frame, nothing drawn):
-             *
-             * 1. This loop runs AFTER process_relocation_block() above, so
-             *    re-reading the section from the file with pread() reverted every
-             *    relocated pointer in .data to its unrelocated ImageBase value.
-             *    That applies to every PE we load, DXMT's d3d11/dxgi included.
-             *
-             * 2. iOS host pages are 16K while PE sections are 4K-aligned, so
-             *    sec_page (floored) and ROUND_SIZE (ceiled) cover bytes owned by
-             *    the PREVIOUS and NEXT sections. mmap(MAP_FIXED|MAP_ANON) zeroed
-             *    them and pread() only restored .data's own bytes -- so the tail
-             *    of .rdata stayed zero. For cube.exe that is exactly where the
-             *    embedded vs/ps DXBC blobs and the vertex/index arrays live (see
-             *    build/dxmt-tests/test_shim.h).
-             *
-             * Snapshotting the whole page range before the remap and copying it
-             * back afterwards preserves relocations, the raw file bytes, Wine's
-             * own zero-fill of the raw tail AND the neighbouring sections in one
-             * step -- which is why the pread() is gone rather than fixed. */
+             * Preserves relocations, embedded shader DXBC blobs, and vertex/index arrays
+             * in neighbouring sections sharing the 16KB host page.
+             * Validates VM_PROT_WRITE with mach_vm_region and logs directly to stderr. */
             uintptr_t sec_page = (uintptr_t)sec_addr & ~(uintptr_t)host_page_mask;
             SIZE_T total_sec_map_sz = ROUND_SIZE(sec[si].VirtualAddress, sec_size, host_page_mask);
             void *save = malloc(total_sec_map_sz);
 
             if (!save)
             {
-                ERR("iOS: OOM snapshotting section %.8s (size=0x%lx) - mapping left alone\n",
-                    sec[si].Name, (unsigned long)total_sec_map_sz);
-                continue;
+                fprintf(stderr, "[iOS-LOADER] OOM snapshotting section %.8s (size=0x%lx)\n",
+                        sec[si].Name, (unsigned long)total_sec_map_sz);
+                fflush(stderr);
+                status = STATUS_NO_MEMORY;
+                goto done;
             }
             memcpy(save, (void *)sec_page, total_sec_map_sz);
-            mach_vm_deallocate(mach_task_self(), (mach_vm_address_t)sec_page, total_sec_map_sz);
+            
+            /* Atomic replace with anonymous RW memory */
             void *mapped = mmap((void *)sec_page, total_sec_map_sz, PROT_READ | PROT_WRITE,
                                 MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
-            if (mapped != MAP_FAILED)
+            if (mapped == MAP_FAILED)
             {
-                memcpy((void *)sec_page, save, total_sec_map_sz);
-                /* head_share / tail_share = bytes in this page range that belong
-                 * to the adjacent sections. Non-zero means the old code was
-                 * corrupting them; printed so the negative case is visible too. */
-                ERR("iOS: anonymous RW section %.8s (page=%p size=0x%lx) content preserved,"
-                    " head_share=0x%lx tail_share=0x%lx\n",
+                /* Fallback: deallocate then allocate with Mach VM overwrite */
+                mach_vm_address_t maddr = (mach_vm_address_t)sec_page;
+                mach_vm_deallocate(mach_task_self(), maddr, total_sec_map_sz);
+                kern_return_t kr = mach_vm_allocate(mach_task_self(), &maddr, total_sec_map_sz,
+                                                    VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE);
+                if (kr == KERN_SUCCESS)
+                {
+                    mach_vm_protect(mach_task_self(), maddr, total_sec_map_sz, FALSE,
+                                    VM_PROT_READ | VM_PROT_WRITE);
+                    mapped = (void *)sec_page;
+                }
+            }
+
+            if (mapped == MAP_FAILED)
+            {
+                fprintf(stderr, "[iOS-LOADER] CRITICAL: Writable section %.8s remap FAILED (page=%p size=0x%lx errno=%d) - ABORTING LOAD\n",
+                        sec[si].Name, (void *)sec_page, (unsigned long)total_sec_map_sz, errno);
+                fflush(stderr);
+                free(save);
+                status = STATUS_NO_MEMORY;
+                goto done;
+            }
+
+            /* Restore saved contents (relocations + neighbouring sections preserved) */
+            memcpy((void *)sec_page, save, total_sec_map_sz);
+            free(save);
+
+            /* Kernel validation check via mach_vm_region */
+            vm_region_basic_info_data_64_t vinfo;
+            mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;
+            mach_port_t object_name = MACH_PORT_NULL;
+            mach_vm_address_t check_addr = (mach_vm_address_t)sec_page;
+            mach_vm_size_t check_size = 0;
+            kern_return_t rkr = mach_vm_region(mach_task_self(), &check_addr, &check_size,
+                                               VM_REGION_BASIC_INFO_64, (vm_region_info_t)&vinfo,
+                                               &count, &object_name);
+            if (object_name != MACH_PORT_NULL) mach_port_deallocate(mach_task_self(), object_name);
+
+            if (rkr == KERN_SUCCESS && !(vinfo.protection & VM_PROT_WRITE))
+            {
+                mach_vm_protect(mach_task_self(), (mach_vm_address_t)sec_page, total_sec_map_sz,
+                                FALSE, VM_PROT_READ | VM_PROT_WRITE);
+            }
+
+            fprintf(stderr, "[iOS-LOADER] Section %.8s anon RW OK (page=%p size=0x%lx prot=%d max=%d head=0x%lx tail=0x%lx)\n",
                     sec[si].Name, (void *)sec_page, (unsigned long)total_sec_map_sz,
+                    (rkr == KERN_SUCCESS ? vinfo.protection : -1),
+                    (rkr == KERN_SUCCESS ? vinfo.max_protection : -1),
                     (unsigned long)((uintptr_t)sec_addr - sec_page),
                     (unsigned long)((sec_page + total_sec_map_sz) - ((uintptr_t)sec_addr + sec_size)));
-            }
-            else
-                ERR("iOS: mmap FAILED for section %.8s (page=%p size=0x%lx) errno=%d\n",
-                    sec[si].Name, (void *)sec_page, (unsigned long)total_sec_map_sz, errno);
-            free(save);
+            fflush(stderr);
         }
         else if (sec[si].Characteristics & IMAGE_SCN_MEM_READ)
         {
