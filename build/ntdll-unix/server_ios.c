@@ -53,8 +53,8 @@ void wine_log_set_file(const char *path)
     pthread_mutex_unlock(&g_wine_log_mutex);
 }
 
-static void wine_log_write(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
-static void wine_log_write(const char *fmt, ...)
+void wine_log_write(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+void wine_log_write(const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);

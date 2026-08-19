@@ -135,6 +135,10 @@ const char **system_dll_paths = NULL;
 const char *user_name = NULL;
 SECTION_IMAGE_INFORMATION main_image_info = { NULL };
 
+#ifdef WINE_IOS
+extern void wine_log_write(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+#endif
+
 /* die on a fatal error; use only during initialization */
 static void fatal_error( const char *err, ... )
 {
