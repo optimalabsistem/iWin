@@ -9086,7 +9086,18 @@ static BOOL set_vprot( struct file_view *view, void *base, size_t size, BYTE vpr
         else if (use_kernel_writewatch && view->protect & VPROT_WRITEWATCH) vprot &= ~VPROT_WRITEWATCH;
         set_page_vprot( base, size, vprot );
     }
+#ifdef WINE_IOS
+    /* On iOS, mprotect_range may fail on image views or JIT aliases due to kernel policy.
+     * As long as set_page_vprot recorded the new protection, we must not deny access. */
+    if (mprotect_range( base, size, 0, 0 ))
+    {
+        dprintf(2, "[vmem-soft-vprot] mprotect_range failed on %p+0x%lx (vprot=0x%x), keeping soft vprot\n",
+                base, (unsigned long)size, (unsigned)vprot);
+    }
+    return TRUE;
+#else
     return !mprotect_range( base, size, 0, 0 );
+#endif
 }
 
 
