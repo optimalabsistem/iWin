@@ -35,6 +35,7 @@ final class MetalHostView: UIView {
     var metalLayer: CAMetalLayer { return layer as! CAMetalLayer }
     override init(frame: CGRect) {
         super.init(frame: frame)
+        autoresizingMask = [.flexibleWidth, .flexibleHeight]
         isUserInteractionEnabled = false   // touches fall through to SwiftUI
         backgroundColor = .clear
         contentScaleFactor = UIScreen.main.scale
@@ -51,6 +52,7 @@ final class MetalHostView: UIView {
         UIApplication.shared.isIdleTimerDisabled = true
         let screen = UIScreen.main.bounds.size
         let scale = UIScreen.main.scale
+        metalLayer.frame = bounds
         metalLayer.drawableSize = CGSize(width: max(screen.width * scale, 1280), height: max(screen.height * scale, 720))
         mythic_display_set_layer(metalLayer)
     }
@@ -139,14 +141,16 @@ final class MetalBackedView: UIView {
             v = s.superview
         }
         let host = MetalHostView.shared
+        host.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         if host.superview !== self {
             host.removeFromSuperview()
             self.addSubview(host)
         }
-        self.bringSubviewToFront(host)
         let effectiveBounds = (bounds.width > 0 && bounds.height > 0) ? bounds : UIScreen.main.bounds
         host.frame = effectiveBounds
+        host.metalLayer.frame = host.bounds
         host.isHidden = false
+        self.bringSubviewToFront(host)
         let full = convert(effectiveBounds, to: w)
         winios_set_compositor_frame(full.minX, full.minY, full.width, full.height)
         mythic_display_set_layer(host.metalLayer)
@@ -165,6 +169,7 @@ final class MetalBackedView: UIView {
         let host = MetalHostView.shared
         let effectiveBounds = (bounds.width > 0 && bounds.height > 0) ? bounds : UIScreen.main.bounds
         host.frame = effectiveBounds
+        host.metalLayer.frame = host.bounds
         self.bringSubviewToFront(host)
         let scale = window?.screen.scale ?? UIScreen.main.scale
         host.metalLayer.drawableSize = CGSize(

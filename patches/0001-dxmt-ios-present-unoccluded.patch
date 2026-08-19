@@ -826,20 +826,17 @@ diff --git a/tests/dx11/dx11_cube.cpp b/tests/dx11/dx11_cube.cpp
 index 000d75a..ec19d8c 100644
 --- a/tests/dx11/dx11_cube.cpp
 +++ b/tests/dx11/dx11_cube.cpp
-@@ -15,10 +15,12 @@
-     char _buf[256]; \
-     int _n = snprintf(_buf, sizeof(_buf), __VA_ARGS__); \
-     if (_n > 0) { \
-+        OutputDebugStringA(_buf); \
-         DWORD _written = 0; \
+@@ -15,10 +15,7 @@
+-    char _buf[256]; \
+-    int _n = snprintf(_buf, sizeof(_buf), __VA_ARGS__); \
+-    if (_n > 0) { \
+-        DWORD _written = 0; \
 -        WriteFile(GetStdHandle(STD_ERROR_HANDLE), _buf, \
 -                  (DWORD)(_n < (int)sizeof(_buf) ? _n : (int)sizeof(_buf)), \
 -                  &_written, NULL); \
-+        HANDLE _h = GetStdHandle(STD_ERROR_HANDLE); \
-+        if (_h && _h != INVALID_HANDLE_VALUE) { \
-+            WriteFile(_h, _buf, (DWORD)(_n < (int)sizeof(_buf) ? _n : (int)sizeof(_buf)), &_written, NULL); \
-+        } \
-     } \
+-    } \
++    fprintf(stderr, __VA_ARGS__); \
++    fflush(stderr); \
  } while(0)
  
 @@ -247,9 +247,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
