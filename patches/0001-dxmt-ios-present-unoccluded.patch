@@ -735,7 +735,7 @@ index c7cee90..6e8bffd 100644
  
  } // namespace dxmt::wsi
 diff --git a/src/winemetal/unix/winemetal_unix.c b/src/winemetal/unix/winemetal_unix.c
-index 30cb25d..670caf8 100644
+index 30cb25d..040ada0 100644
 --- a/src/winemetal/unix/winemetal_unix.c
 +++ b/src/winemetal/unix/winemetal_unix.c
 @@ -48,11 +48,7 @@ typedef int NTSTATUS;
@@ -777,3 +777,99 @@ index 30cb25d..670caf8 100644
    params->ret_error = (obj_handle_t)err;
    return STATUS_SUCCESS;
  }
+@@ -1928,6 +1941,9 @@ struct macdrv_functions_t {
+ static NTSTATUS
+ _CreateMetalViewFromHWND(void *obj) {
+   struct unixcall_create_metal_view_from_hwnd *params = obj;
++  fprintf(stderr, "[STEP-1-D3D11] winemetal _CreateMetalViewFromHWND called: hwnd=%p device=%p\n",
++          (void *)params->hwnd, (void *)params->device);
++  fflush(stderr);
+ 
+   struct macdrv_win_data *(*pfn_get_win_data)(HWND hwnd) = NULL;
+   void (*pfn_release_win_data)(struct macdrv_win_data *data) = NULL;
+@@ -1955,8 +1971,19 @@ _CreateMetalViewFromHWND(void *obj) {
+     params->ret_view = (obj_handle_t)view;
+     if (view) {
+       params->ret_layer = (obj_handle_t)pfn_macdrv_view_get_metal_layer(view);
++      fprintf(stderr, "[STEP-2-METAL-LAYER] winemetal _CreateMetalViewFromHWND SUCCESS: view=%p layer=%p\n",
++              (void *)view, (void *)params->ret_layer);
++      fflush(stderr);
++    } else {
++      fprintf(stderr, "[STEP-2-METAL-LAYER] winemetal _CreateMetalViewFromHWND FAILED to create view from client_cocoa_view=%p\n",
++              win_data->client_cocoa_view);
++      fflush(stderr);
+     }
+     pfn_release_win_data(win_data);
++  } else {
++    fprintf(stderr, "[STEP-1-D3D11] winemetal _CreateMetalViewFromHWND FAILED symbol lookup (macdrv=%p pfn_view=%p)\n",
++            macdrv_functions, pfn_macdrv_view_create_metal_view);
++    fflush(stderr);
+   }
+ 
+   return STATUS_SUCCESS;
+diff --git a/tests/dx11/dx11_cube.cpp b/tests/dx11/dx11_cube.cpp
+index 000d75a..ec19d8c 100644
+--- a/tests/dx11/dx11_cube.cpp
++++ b/tests/dx11/dx11_cube.cpp
+@@ -247,9 +247,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
+                                 0, 0, hInstance, 0);
+ 
+         if(!hwnd) {
++            ATOMIC_TRACE("[STEP-1-D3D11] cube.exe: CreateWindowEx failed\n");
+             MessageBoxA(0, "CreateWindowEx failed", "Fatal Error", MB_OK);
+             return GetLastError();
+         }
++        ATOMIC_TRACE("[STEP-1-D3D11] cube.exe: CreateWindowEx OK, hwnd=%p\n", hwnd);
+     }
+ 
+     // Create D3D11 Device and Context
+@@ -264,11 +266,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
+         creationFlags |= D3D11_CREATE_DEVICE_DEBUG;
+         #endif
+ 
++        ATOMIC_TRACE("[STEP-1-D3D11] cube.exe: Calling D3D11CreateDevice...\n");
+         HRESULT hResult = D3D11CreateDevice(0, D3D_DRIVER_TYPE_HARDWARE,
+                                             0, creationFlags,
+                                             featureLevels, ARRAYSIZE(featureLevels),
+                                             D3D11_SDK_VERSION, &baseDevice,
+                                             0, &baseDeviceContext);
++        ATOMIC_TRACE("[STEP-1-D3D11] cube.exe: D3D11CreateDevice result=0x%08lx baseDevice=%p\n",
++                     (unsigned long)hResult, baseDevice);
+         if(FAILED(hResult)){
+             MessageBoxA(0, "D3D11CreateDevice() failed", "Fatal Error", MB_OK);
+             return GetLastError();
+@@ -339,7 +344,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
+         d3d11SwapChainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
+         d3d11SwapChainDesc.Flags = 0;
+ 
++        ATOMIC_TRACE("[STEP-2-METAL-LAYER] cube.exe: Calling CreateSwapChainForHwnd (hwnd=%p)...\n", hwnd);
+         HRESULT hResult = dxgiFactory->CreateSwapChainForHwnd(d3d11Device, hwnd, &d3d11SwapChainDesc, 0, 0, &d3d11SwapChain);
++        ATOMIC_TRACE("[STEP-2-METAL-LAYER] cube.exe: CreateSwapChainForHwnd result=0x%08lx swapChain=%p\n",
++                     (unsigned long)hResult, d3d11SwapChain);
+         assert(SUCCEEDED(hResult));
+ 
+         dxgiFactory->Release();
+@@ -349,6 +357,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
+     ID3D11RenderTargetView* d3d11FrameBufferView;
+     ID3D11DepthStencilView* depthBufferView;
+     win32CreateD3D11RenderTargets(d3d11Device, d3d11SwapChain, &d3d11FrameBufferView, &depthBufferView);
++    ATOMIC_TRACE("[STEP-2-METAL-LAYER] cube.exe: win32CreateD3D11RenderTargets OK (RTV=%p DSV=%p)\n",
++                 d3d11FrameBufferView, depthBufferView);
+ 
+     UINT shaderCompileFlags = 0;
+     // Compiling with this flag allows debugging shaders with Visual Studio
+@@ -779,7 +789,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
+             }
+         }
+ 
+-        d3d11SwapChain->Present(1, 0);
++        static int present_frame_count = 0;
++        HRESULT pres_res = d3d11SwapChain->Present(1, 0);
++        present_frame_count++;
++        if (present_frame_count <= 10 || (present_frame_count % 300) == 0) {
++            ATOMIC_TRACE("[STEP-3-RENDER-LOOP] cube.exe: Present frame #%d hr=0x%08lx\n",
++                         present_frame_count, (unsigned long)pres_res);
++        }
+     }
+ 
+     return 0;

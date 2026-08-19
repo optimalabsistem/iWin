@@ -150,7 +150,7 @@ final class MetalBackedView: UIView {
         let full = convert(effectiveBounds, to: w)
         winios_set_compositor_frame(full.minX, full.minY, full.width, full.height)
         mythic_display_set_layer(host.metalLayer)
-        LogStore.shared.log("MetalLayer registered with DXMT shim", level: .success)
+        LogStore.shared.log("[STEP-2-METAL-LAYER] MetalLayer registered with DXMT shim: host=\(host) layer=\(host.metalLayer) bounds=\(effectiveBounds)", level: .success)
     }
 
     override func willMove(toWindow newWindow: UIWindow?) {
@@ -1758,6 +1758,7 @@ struct ContentView: View {
         unsetenv("MYTHIC_DESKTOP")
         setenv("MYTHIC_SCREEN_W", String(w), 1)
         setenv("MYTHIC_SCREEN_H", String(h), 1)
+        LogStore.shared.log("[STEP-0-UI] launchStandalone3DTest: targetExe=\(targetExe) mode=\(wineEngineMode) resolution=\(w)x\(h)", level: .info)
         selectedTab = .screen
         runWineFullSequence()
     }
