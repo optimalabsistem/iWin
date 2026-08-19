@@ -819,10 +819,10 @@ index 30cb25d..a610bcd 100644
  
    return STATUS_SUCCESS;
 diff --git a/tests/dx11/dx11_cube.cpp b/tests/dx11/dx11_cube.cpp
-index 000d75a..e7aa3d7 100644
+index 000d75a..5a7a796 100644
 --- a/tests/dx11/dx11_cube.cpp
 +++ b/tests/dx11/dx11_cube.cpp
-@@ -8,19 +8,12 @@
+@@ -8,19 +8,9 @@
  #include <assert.h>
  #include <stdint.h>
  
@@ -830,8 +830,6 @@ index 000d75a..e7aa3d7 100644
 - * fprintf+fflush gets interleaved on iOS where ntdll's syscall trace
 - * shares fd 2 with our stdout via dup2, and stdio buffering boundaries
 - * don't match write() atomicity. */
-+extern "C" __declspec(dllimport) int __cdecl __wine_dbg_output(const char *str);
-+
  #define ATOMIC_TRACE(...) do { \
 -    char _buf[256]; \
 -    int _n = snprintf(_buf, sizeof(_buf), __VA_ARGS__); \
@@ -841,13 +839,12 @@ index 000d75a..e7aa3d7 100644
 -                  (DWORD)(_n < (int)sizeof(_buf) ? _n : (int)sizeof(_buf)), \
 -                  &_written, NULL); \
 -    } \
-+    char _buf[512]; \
-+    snprintf(_buf, sizeof(_buf), __VA_ARGS__); \
-+    __wine_dbg_output(_buf); \
++    fprintf(stderr, __VA_ARGS__); \
++    fflush(stderr); \
  } while(0)
  
  #include "3DMaths.h"
-@@ -232,24 +225,27 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
+@@ -232,24 +222,27 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
              return GetLastError();
          }
  
@@ -882,7 +879,7 @@ index 000d75a..e7aa3d7 100644
      }
  
      // Create D3D11 Device and Context
-@@ -264,11 +260,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
+@@ -264,11 +257,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
          creationFlags |= D3D11_CREATE_DEVICE_DEBUG;
          #endif
  
@@ -897,7 +894,7 @@ index 000d75a..e7aa3d7 100644
          if(FAILED(hResult)){
              MessageBoxA(0, "D3D11CreateDevice() failed", "Fatal Error", MB_OK);
              return GetLastError();
-@@ -339,7 +338,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
+@@ -339,7 +335,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
          d3d11SwapChainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
          d3d11SwapChainDesc.Flags = 0;
  
@@ -908,7 +905,7 @@ index 000d75a..e7aa3d7 100644
          assert(SUCCEEDED(hResult));
  
          dxgiFactory->Release();
-@@ -349,6 +351,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
+@@ -349,6 +348,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
      ID3D11RenderTargetView* d3d11FrameBufferView;
      ID3D11DepthStencilView* depthBufferView;
      win32CreateD3D11RenderTargets(d3d11Device, d3d11SwapChain, &d3d11FrameBufferView, &depthBufferView);
@@ -917,7 +914,7 @@ index 000d75a..e7aa3d7 100644
  
      UINT shaderCompileFlags = 0;
      // Compiling with this flag allows debugging shaders with Visual Studio
-@@ -685,7 +689,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
+@@ -685,7 +686,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
          constants->modelViewProj = modelViewProj;
          d3d11DeviceContext->Unmap(constantBuffer, 0);
  
@@ -926,7 +923,7 @@ index 000d75a..e7aa3d7 100644
          d3d11DeviceContext->ClearRenderTargetView(d3d11FrameBufferView, backgroundColor);
          
          d3d11DeviceContext->ClearDepthStencilView(depthBufferView, D3D11_CLEAR_DEPTH, 1.0f, 0);
-@@ -779,7 +783,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
+@@ -779,7 +780,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
              }
          }
  
