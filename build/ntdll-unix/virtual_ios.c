@@ -7433,14 +7433,14 @@ static inline int mprotect_exec( void *base, size_t size, int unix_prot )
      * but the kernel silently keeps pages read-only (writes silently
      * no-op). The Mach vm_protect API succeeds where POSIX silently fails.
      *
-     * Apply only on the PROT_WRITE-add path; non-write protect changes go
-     * through the regular mprotect below. */
+     * Apply on all non-EXEC protect changes; non-write protect changes also
+     * use mach_vm_protect to succeed on Mach-O and foreign pages. */
     if (!ios_in_mach_exc)                       /* ml374: see ios_in_mach_exc */
         ERR("mprotect_exec(%p, 0x%lx, %c%c%c)\n", base, (unsigned long)size,
             (unix_prot & PROT_READ)  ? 'r' : '-',
             (unix_prot & PROT_WRITE) ? 'w' : '-',
             (unix_prot & PROT_EXEC)  ? 'x' : '-');
-    if ((unix_prot & PROT_WRITE) && !(unix_prot & PROT_EXEC))
+    if (!(unix_prot & PROT_EXEC))
     {
         /* ml391 (task #60): try WITHOUT VM_PROT_COPY first.  COPY forcibly
          * privatizes the mapping object — on a MAP_SHARED section view it
@@ -7454,21 +7454,30 @@ static inline int mprotect_exec( void *base, size_t size, int unix_prot )
          * mmap-downgrade.  Only when maxprot lacks WRITE (code-signed PE
          * files — the IAT case this path was built for) fall back to +COPY,
          * where privatizing is correct since PE data is per-process anyway. */
+        vm_prot_t mprot = 0;
+        if (unix_prot & PROT_READ)  mprot |= VM_PROT_READ;
+        if (unix_prot & PROT_WRITE) mprot |= VM_PROT_WRITE;
         kern_return_t kr = mach_vm_protect(mach_task_self(), (mach_vm_address_t)(uintptr_t)base, (mach_vm_size_t)size,
                                             FALSE,  /* set_maximum */
-                                            VM_PROT_READ | VM_PROT_WRITE);
+                                            mprot);
         if (kr == KERN_SUCCESS) return 0;
-        kr = mach_vm_protect(mach_task_self(), (mach_vm_address_t)(uintptr_t)base, (mach_vm_size_t)size,
-                             FALSE,  /* set_maximum */
-                             VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
-        if (kr == KERN_SUCCESS) {
-            if (!ios_in_mach_exc)
-                ERR("iOS mach_vm_protect RW+COPY OK at %p+0x%lx (plain RW refused — privatized)\n",
-                    base, (unsigned long)size);
-            return 0;
+        if (unix_prot & PROT_WRITE)
+        {
+            kr = mach_vm_protect(mach_task_self(), (mach_vm_address_t)(uintptr_t)base, (mach_vm_size_t)size,
+                                 FALSE,  /* set_maximum */
+                                 mprot | VM_PROT_COPY);
+            if (kr == KERN_SUCCESS) {
+                if (!ios_in_mach_exc)
+                    ERR("iOS mach_vm_protect RW+COPY OK at %p+0x%lx (plain RW refused — privatized)\n",
+                        base, (unsigned long)size);
+                return 0;
+            }
         }
         if (!ios_in_mach_exc)
-            ERR("iOS mach_vm_protect RW failed kr=%d at %p+0x%lx — falling to mprotect\n",
+            ERR("iOS mach_vm_protect %c%c%c failed kr=%d at %p+0x%lx — falling to mprotect\n",
+                (unix_prot & PROT_READ)  ? 'r' : '-',
+                (unix_prot & PROT_WRITE) ? 'w' : '-',
+                (unix_prot & PROT_EXEC)  ? 'x' : '-',
                 kr, base, (unsigned long)size);
     }
 
@@ -8459,16 +8468,32 @@ static inline int mprotect_exec( void *base, size_t size, int unix_prot )
                         void *target = (void *)(sec_abs & ~(uintptr_t)(page_size - 1));
                         size_t sec_page_size = sec_abs_end - (uintptr_t)target;
 
-                        /* Try mprotect to make data section writable (drops execute) */
-                        if (mprotect(target, sec_page_size, PROT_READ | PROT_WRITE) == 0)
+                        /* Make data section writable in JIT pool via vm_remap from RW alias */
+                        vm_address_t remap_target = (vm_address_t)target;
+                        vm_address_t source_rw = (vm_address_t)((char *)jit_rw_base + ((uintptr_t)target - (uintptr_t)jit_rx_base));
+                        vm_prot_t cur_prot = 0, max_prot = 0;
+                        kern_return_t kr = vm_remap(mach_task_self(),
+                            &remap_target, (vm_size_t)sec_page_size, 0,
+                            VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+                            mach_task_self(),
+                            source_rw,
+                            FALSE,
+                            &cur_prot, &max_prot,
+                            VM_INHERIT_DEFAULT);
+                        if (kr == KERN_SUCCESS)
+                        {
+                            ERR("iOS JIT:     → vm_remap RW at %p (0x%lx bytes) OK from %p\n",
+                                target, (unsigned long)sec_page_size, (void *)source_rw);
+                        }
+                        else if (mprotect(target, sec_page_size, PROT_READ | PROT_WRITE) == 0)
                         {
                             ERR("iOS JIT:     → mprotect RW at %p (0x%lx bytes) OK\n",
                                 target, (unsigned long)sec_page_size);
                         }
                         else
                         {
-                            ERR("iOS JIT:     → mprotect RW FAILED errno=%d (%s), writes handled via SIGBUS emulation\n",
-                                errno, strerror(errno));
+                            ERR("iOS JIT:     → remap RW FAILED kr=%d errno=%d, writes handled via SIGBUS emulation\n",
+                                kr, errno);
                         }
                     }
                 }
