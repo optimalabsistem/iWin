@@ -11242,93 +11242,37 @@ static NTSTATUS map_image_into_view( struct file_view *view, const UNICODE_STRIN
                 sec[si].Name, sec_addr, (unsigned long)sec_size);
             mprotect_exec(sec_addr, sec_size, prot);
         }
-        else if (sec[si].Characteristics & IMAGE_SCN_MEM_WRITE)
+        else if (sec[si].Characteristics & (IMAGE_SCN_MEM_WRITE | IMAGE_SCN_MEM_READ))
         {
-            /* ml690 & ml692: SNAPSHOT -> remap -> RESTORE with kernel validation & fail-fast.
-             *
-             * Preserves relocations, embedded shader DXBC blobs, and vertex/index arrays
-             * in neighbouring sections sharing the 16KB host page.
-             * Validates VM_PROT_WRITE with mach_vm_region and logs directly to stderr. */
-            uintptr_t sec_page = (uintptr_t)sec_addr & ~(uintptr_t)host_page_mask;
-            SIZE_T total_sec_map_sz = ROUND_SIZE(sec[si].VirtualAddress, sec_size, host_page_mask);
-            void *save = malloc(total_sec_map_sz);
-
-            if (!save)
+            SIZE_T raw_sz = sec[si].PointerToRawData ? min(sec[si].SizeOfRawData, sec_size) : 0;
+            if (raw_sz == 0)
             {
-                fprintf(stderr, "[iOS-LOADER] OOM snapshotting section %.8s (size=0x%lx)\n",
-                        sec[si].Name, (unsigned long)total_sec_map_sz);
-                fflush(stderr);
-                status = STATUS_NO_MEMORY;
-                goto done;
+                uintptr_t bss_page = (uintptr_t)sec_addr & ~(uintptr_t)host_page_mask;
+                SIZE_T bss_map_size = ROUND_SIZE((uintptr_t)sec_addr, sec_size, host_page_mask);
+                mach_vm_deallocate(mach_task_self(), (mach_vm_address_t)bss_page, bss_map_size);
+                void *mapped = mmap((void *)bss_page, bss_map_size, PROT_READ | PROT_WRITE,
+                                    MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
+                ERR("iOS: allocated pure BSS section %.8s (addr=%p size=0x%lx, mmap=%p)\n",
+                    sec[si].Name, (void *)bss_page, (unsigned long)bss_map_size, mapped);
             }
-            memcpy(save, (void *)sec_page, total_sec_map_sz);
-            
-            /* Atomic replace with anonymous RW memory */
-            void *mapped = mmap((void *)sec_page, total_sec_map_sz, PROT_READ | PROT_WRITE,
-                                MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
-            if (mapped == MAP_FAILED)
+            else
             {
-                /* Fallback: deallocate then allocate with Mach VM overwrite */
-                mach_vm_address_t maddr = (mach_vm_address_t)sec_page;
-                mach_vm_deallocate(mach_task_self(), maddr, total_sec_map_sz);
-                kern_return_t kr = mach_vm_allocate(mach_task_self(), &maddr, total_sec_map_sz,
-                                                    VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE);
-                if (kr == KERN_SUCCESS)
+                uintptr_t data_page = (uintptr_t)sec_addr & ~(uintptr_t)host_page_mask;
+                SIZE_T data_map_sz = ROUND_SIZE((uintptr_t)sec_addr, raw_sz, host_page_mask);
+                mprotect((void *)data_page, data_map_sz, PROT_READ | PROT_WRITE);
+
+                uintptr_t bss_page = data_page + data_map_sz;
+                uintptr_t sec_end = data_page + ROUND_SIZE((uintptr_t)sec_addr, sec_size, host_page_mask);
+                if (bss_page < sec_end)
                 {
-                    mach_vm_protect(mach_task_self(), maddr, total_sec_map_sz, FALSE,
-                                    VM_PROT_READ | VM_PROT_WRITE);
-                    mapped = (void *)sec_page;
+                    SIZE_T bss_map_size = sec_end - bss_page;
+                    mach_vm_deallocate(mach_task_self(), (mach_vm_address_t)bss_page, bss_map_size);
+                    void *mapped = mmap((void *)bss_page, bss_map_size, PROT_READ | PROT_WRITE,
+                                        MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
+                    ERR("iOS: allocated tail BSS section %.8s (addr=%p size=0x%lx, mmap=%p)\n",
+                        sec[si].Name, (void *)bss_page, (unsigned long)bss_map_size, mapped);
                 }
             }
-
-            if (mapped == MAP_FAILED)
-            {
-                fprintf(stderr, "[iOS-LOADER] CRITICAL: Writable section %.8s remap FAILED (page=%p size=0x%lx errno=%d) - ABORTING LOAD\n",
-                        sec[si].Name, (void *)sec_page, (unsigned long)total_sec_map_sz, errno);
-                fflush(stderr);
-                free(save);
-                status = STATUS_NO_MEMORY;
-                goto done;
-            }
-
-            /* Restore saved contents (relocations + neighbouring sections preserved) */
-            memcpy((void *)sec_page, save, total_sec_map_sz);
-            free(save);
-
-            /* Kernel validation check via mach_vm_region */
-            vm_region_basic_info_data_64_t vinfo;
-            mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;
-            mach_port_t object_name = MACH_PORT_NULL;
-            mach_vm_address_t check_addr = (mach_vm_address_t)sec_page;
-            mach_vm_size_t check_size = 0;
-            kern_return_t rkr = mach_vm_region(mach_task_self(), &check_addr, &check_size,
-                                               VM_REGION_BASIC_INFO_64, (vm_region_info_t)&vinfo,
-                                               &count, &object_name);
-            if (object_name != MACH_PORT_NULL) mach_port_deallocate(mach_task_self(), object_name);
-
-            if (rkr == KERN_SUCCESS && !(vinfo.protection & VM_PROT_WRITE))
-            {
-                mach_vm_protect(mach_task_self(), (mach_vm_address_t)sec_page, total_sec_map_sz,
-                                FALSE, VM_PROT_READ | VM_PROT_WRITE);
-            }
-
-            fprintf(stderr, "[iOS-LOADER] Section %.8s anon RW OK (page=%p size=0x%lx prot=%d max=%d head=0x%lx tail=0x%lx)\n",
-                    sec[si].Name, (void *)sec_page, (unsigned long)total_sec_map_sz,
-                    (rkr == KERN_SUCCESS ? vinfo.protection : -1),
-                    (rkr == KERN_SUCCESS ? vinfo.max_protection : -1),
-                    (unsigned long)((uintptr_t)sec_addr - sec_page),
-                    (unsigned long)((sec_page + total_sec_map_sz) - ((uintptr_t)sec_addr + sec_size)));
-            fflush(stderr);
-        }
-        else if (sec[si].Characteristics & IMAGE_SCN_MEM_READ)
-        {
-            /* ml690: only pages FULLY inside this section. A 16K host page shared
-             * with a writable section must keep PROT_WRITE -- otherwise the first
-             * store into .data faults on plain anonymous memory that has no JIT
-             * alias, which mach-heal-page then papers over silently. */
-            uintptr_t start = ((uintptr_t)sec_addr + host_page_mask) & ~(uintptr_t)host_page_mask;
-            uintptr_t end   = ((uintptr_t)sec_addr + sec_size) & ~(uintptr_t)host_page_mask;
-            if (end > start) mprotect((void *)start, end - start, PROT_READ);
         }
     }
 #endif
@@ -12057,32 +12001,25 @@ NTSTATUS virtual_create_builtin_view( void *module, const UNICODE_STRING *nt_nam
                 SIZE_T sec_size = sec[i].Misc.VirtualSize ? sec[i].Misc.VirtualSize : sec[i].SizeOfRawData;
                 uintptr_t sec_page = (uintptr_t)((char *)base + sec[i].VirtualAddress) & ~(uintptr_t)host_page_mask;
                 SIZE_T raw_sz = sec[i].SizeOfRawData;
-                SIZE_T data_map_sz = raw_sz ? ROUND_SIZE(sec[i].VirtualAddress, raw_sz, host_page_mask) : 0;
-                uintptr_t bss_p = sec_page + data_map_sz;
-                uintptr_t sec_end = sec_page + ROUND_SIZE(sec[i].VirtualAddress, sec_size, host_page_mask);
-
-                if (raw_sz) mprotect((void *)sec_page, data_map_sz, PROT_READ | PROT_WRITE);
-
-                /* ml690: this mmap is page-granular on a 16K host page while PE
-                 * sections are 4K-aligned, so the range can cover bytes owned by
-                 * the NEXT section (and, for raw_sz == 0, the PREVIOUS one).
-                 * Zeroing those is how a loaded image silently loses .rdata/.text
-                 * bytes -- the same defect that left cube.exe on a black screen
-                 * via map_image_into_view. Snapshot and copy back. */
-                if (bss_p < sec_end)
+                if (raw_sz == 0)
                 {
-                    SIZE_T bss_sz = sec_end - bss_p;
-                    void *save = malloc(bss_sz);
+                    SIZE_T bss_sz = ROUND_SIZE((uintptr_t)((char *)base + sec[i].VirtualAddress), sec_size, host_page_mask);
+                    mach_vm_deallocate(mach_task_self(), (mach_vm_address_t)sec_page, bss_sz);
+                    mmap((void *)sec_page, bss_sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
+                }
+                else
+                {
+                    SIZE_T data_map_sz = ROUND_SIZE((uintptr_t)((char *)base + sec[i].VirtualAddress), raw_sz, host_page_mask);
+                    mprotect((void *)sec_page, data_map_sz, PROT_READ | PROT_WRITE);
 
-                    if (save) memcpy(save, (void *)bss_p, bss_sz);
-                    mach_vm_deallocate(mach_task_self(), (mach_vm_address_t)bss_p, bss_sz);
-                    if (mmap((void *)bss_p, bss_sz, PROT_READ | PROT_WRITE,
-                             MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0) == MAP_FAILED)
-                        ERR("iOS: builtin BSS mmap FAILED for %.8s page=%p size=0x%lx errno=%d\n",
-                            sec[i].Name, (void *)bss_p, (unsigned long)bss_sz, errno);
-                    else if (save)
-                        memcpy((void *)bss_p, save, bss_sz);
-                    free(save);
+                    uintptr_t bss_p = sec_page + data_map_sz;
+                    uintptr_t sec_end = sec_page + ROUND_SIZE((uintptr_t)((char *)base + sec[i].VirtualAddress), sec_size, host_page_mask);
+                    if (bss_p < sec_end)
+                    {
+                        SIZE_T bss_sz = sec_end - bss_p;
+                        mach_vm_deallocate(mach_task_self(), (mach_vm_address_t)bss_p, bss_sz);
+                        mmap((void *)bss_p, bss_sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
+                    }
                 }
             }
 #endif
