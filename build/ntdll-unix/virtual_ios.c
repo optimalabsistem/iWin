@@ -7472,6 +7472,32 @@ static inline int mprotect_exec( void *base, size_t size, int unix_prot )
                         base, (unsigned long)size);
                 return 0;
             }
+
+            /* If mach_vm_protect with VM_PROT_COPY fails on iOS file-backed PE page,
+             * allocate a fresh anonymous RW page, copy existing contents, and remap over base. */
+            vm_address_t anon_page = 0;
+            kern_return_t akr = vm_allocate(mach_task_self(), &anon_page, (vm_size_t)size, VM_FLAGS_ANYWHERE);
+            if (akr == KERN_SUCCESS)
+            {
+                memcpy((void *)anon_page, base, size);
+                vm_address_t target_addr = (vm_address_t)base;
+                vm_prot_t cur_prot = 0, max_prot = 0;
+                kern_return_t rkr = vm_remap(mach_task_self(),
+                    &target_addr, (vm_size_t)size, 0,
+                    VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+                    mach_task_self(),
+                    anon_page,
+                    FALSE,
+                    &cur_prot, &max_prot,
+                    VM_INHERIT_DEFAULT);
+                vm_deallocate(mach_task_self(), anon_page, (vm_size_t)size);
+                if (rkr == KERN_SUCCESS)
+                {
+                    dprintf(2, "[vmem-remap-rw] successfully privatized RW page %p+0x%lx via anon vm_remap\n",
+                            base, (unsigned long)size);
+                    return 0;
+                }
+            }
         }
         if (!ios_in_mach_exc)
             ERR("iOS mach_vm_protect %c%c%c failed kr=%d at %p+0x%lx — falling to mprotect\n",
