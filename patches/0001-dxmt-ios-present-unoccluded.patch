@@ -748,10 +748,25 @@ index 30cb25d..040ada0 100644
 -    dispatch_sync(dispatch_get_main_queue(), block);
 -  }
 +  block();
++}
++
++static NTSTATUS
++_MTLCopyAllDevices(void *obj) {
++  struct unixcall_generic_obj_ret *params = obj;
++#if defined(__APPLE__) && TARGET_OS_IPHONE
++  id<MTLDevice> dev = MTLCreateSystemDefaultDevice();
++  if (dev) {
++    NSArray *arr = [NSArray arrayWithObject:dev];
++    params->ret = (obj_handle_t)CFBridgingRetain(arr);
++    return STATUS_SUCCESS;
++  }
++#endif
++  params->ret = (obj_handle_t)MTLCopyAllDevices();
++  return STATUS_SUCCESS;
  }
  
  static NTSTATUS
-@@ -553,7 +549,24 @@ _MTLDevice_newLibrary(void *obj) {
+@@ -553,7 +564,24 @@ _MTLDevice_newLibrary(void *obj) {
    struct unixcall_mtldevice_newlibrary *params = obj;
    id<MTLDevice> device = (id<MTLDevice>)params->device;
    NSError *err = NULL;
