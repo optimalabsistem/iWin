@@ -141,9 +141,8 @@ public final class HotPatchManager: ObservableObject {
     private var pollTimer: Timer?
 
     private init() {
-        // Auto-check patches on launch after 2 seconds
+        // Auto-check patches disabled to protect system32 binary integrity
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
-            self?.syncHotPatches(silent: true)
             self?.startRemoteCommandPolling()
         }
     }
