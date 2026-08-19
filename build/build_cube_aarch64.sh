@@ -12,6 +12,16 @@ if [ ! -x "$CXX" ]; then
     CXX=$(command -v aarch64-w64-mingw32-clang++ || true)
 fi
 
+if [ -z "$CXX" ] || [ ! -x "$CXX" ]; then
+    echo "==> Fetching llvm-mingw toolchain for aarch64 cross-compilation..."
+    mkdir -p "$REPO_ROOT/toolchains"
+    curl -sL https://github.com/mstorsjo/llvm-mingw/releases/download/20240619/llvm-mingw-20240619-ucrt-macos-universal.tar.xz | tar -xJ -C "$REPO_ROOT/toolchains" || true
+    LLVM_DIR=$(find "$REPO_ROOT/toolchains" -maxdepth 1 -type d -name "llvm-mingw*" | head -n 1)
+    if [ -n "$LLVM_DIR" ] && [ -d "$LLVM_DIR/bin" ]; then
+        CXX="$LLVM_DIR/bin/aarch64-w64-mingw32-clang++"
+    fi
+fi
+
 DXMT_DIRECTX="$REPO_ROOT/research/dxmt/include/native/directx"
 DXMT_TESTS="$REPO_ROOT/research/dxmt/tests/dx11"
 OUT="$REPO_ROOT/build/dxmt-tests/out/cube"
@@ -37,10 +47,16 @@ if [ -n "$CXX" ] && [ -x "$CXX" ]; then
         "$OUT/cube_blobs.c" \
         -ld3d11 -ldxgi -luuid -lwinmm
 
+    WINEBUILD="$REPO_ROOT/wine/build-macos/tools/winebuild/winebuild"
+    if [ -x "$WINEBUILD" ]; then
+        echo "==> Tagging cube.exe as Wine builtin"
+        "$WINEBUILD" --builtin "$OUT/cube.exe" || true
+    fi
+
     # Copy to app bundle
     mkdir -p "$REPO_ROOT/app/Mythic/aarch64-windows"
     cp "$OUT/cube.exe" "$REPO_ROOT/app/Mythic/aarch64-windows/cube.exe"
-    echo "==> Copied updated cube.exe to app/Mythic/aarch64-windows/cube.exe"
+    echo "==> Copied fresh cube.exe to app/Mythic/aarch64-windows/cube.exe"
 else
-    echo "Warning: aarch64-w64-mingw32-clang++ not found locally, will be built in CI"
+    echo "Warning: aarch64-w64-mingw32-clang++ could not be acquired"
 fi
