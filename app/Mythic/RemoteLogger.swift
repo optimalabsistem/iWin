@@ -116,24 +116,9 @@ final class RemoteLogger {
             let crashReport = "[CRASH] Uncaught Exception: \(exception.name.rawValue): \(exception.reason ?? "none")\nCall Stack:\n\(symbols)"
             RemoteLogger.shared.send(crashReport, level: "CRASH")
         }
-        
-        // Signal crash handler
-        signal(SIGSEGV) { sig in
-            RemoteLogger.shared.send("[CRASH] Received SIGSEGV (\(sig)) - Segmentation Fault", level: "FATAL")
-            exit(128 + sig)
-        }
-        signal(SIGBUS) { sig in
-            RemoteLogger.shared.send("[CRASH] Received SIGBUS (\(sig)) - Bus Error / Bad Memory Access", level: "FATAL")
-            exit(128 + sig)
-        }
-        signal(SIGILL) { sig in
-            RemoteLogger.shared.send("[CRASH] Received SIGILL (\(sig)) - Illegal CPU Instruction", level: "FATAL")
-            exit(128 + sig)
-        }
-        signal(SIGABRT) { sig in
-            RemoteLogger.shared.send("[CRASH] Received SIGABRT (\(sig)) - Abort Signal", level: "FATAL")
-            exit(128 + sig)
-        }
+        // Do NOT install POSIX signal handlers (SIGSEGV/SIGBUS/SIGILL) here:
+        // Wine and FEX on iOS require full ownership of signals and Mach exception ports
+        // for SEH, write watch, JIT pool access, and page virtualization.
     }
 }
 
