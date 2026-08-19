@@ -45,7 +45,7 @@ if [ -n "$CXX" ] && [ -x "$CXX" ]; then
         -static -static-libgcc -static-libstdc++ \
         "$DXMT_TESTS/dx11_cube.cpp" \
         "$OUT/cube_blobs.c" \
-        -ld3d11 -ldxgi -luuid -lwinmm
+        -ld3d11 -ldxgi -luuid -lwinmm -lntdll
 
     WINEBUILD="$REPO_ROOT/wine/build-macos/tools/winebuild/winebuild"
     if [ -x "$WINEBUILD" ]; then
