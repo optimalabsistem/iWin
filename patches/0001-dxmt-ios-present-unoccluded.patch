@@ -823,10 +823,18 @@ index 30cb25d..040ada0 100644
  
    return STATUS_SUCCESS;
 diff --git a/tests/dx11/dx11_cube.cpp b/tests/dx11/dx11_cube.cpp
-index 000d75a..ec19d8c 100644
+index 000d75a..ca2fbe3 100644
 --- a/tests/dx11/dx11_cube.cpp
 +++ b/tests/dx11/dx11_cube.cpp
-@@ -15,10 +15,7 @@
+@@ -8,19 +8,9 @@
+ #include <assert.h>
+ #include <stdint.h>
+ 
+-/* Atomic single-syscall trace: format then issue ONE WriteFile to stderr.
+- * fprintf+fflush gets interleaved on iOS where ntdll's syscall trace
+- * shares fd 2 with our stdout via dup2, and stdio buffering boundaries
+- * don't match write() atomicity. */
+ #define ATOMIC_TRACE(...) do { \
 -    char _buf[256]; \
 -    int _n = snprintf(_buf, sizeof(_buf), __VA_ARGS__); \
 -    if (_n > 0) { \
@@ -839,7 +847,28 @@ index 000d75a..ec19d8c 100644
 +    fflush(stderr); \
  } while(0)
  
-@@ -247,9 +247,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
+ #include "3DMaths.h"
+@@ -232,24 +222,27 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
+             return GetLastError();
+         }
+ 
+-        RECT initialRect = { 0, 0, 1024, 768 };
+-        AdjustWindowRectEx(&initialRect, WS_OVERLAPPEDWINDOW, FALSE, WS_EX_OVERLAPPEDWINDOW);
+-        LONG initialWidth = initialRect.right - initialRect.left;
+-        LONG initialHeight = initialRect.bottom - initialRect.top;
++        LONG initialWidth = 1280;
++        LONG initialHeight = 720;
+ 
+-        hwnd = CreateWindowExW(WS_EX_OVERLAPPEDWINDOW,
++        hwnd = CreateWindowExW(0,
+                                 winClass.lpszClassName,
+                                 L"08. Drawing a Cube",
+-                                WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+-                                CW_USEDEFAULT, CW_USEDEFAULT,
++                                WS_POPUP | WS_VISIBLE,
++                                0, 0,
+                                 initialWidth, 
+                                 initialHeight,
                                  0, 0, hInstance, 0);
  
          if(!hwnd) {
@@ -847,11 +876,14 @@ index 000d75a..ec19d8c 100644
              MessageBoxA(0, "CreateWindowEx failed", "Fatal Error", MB_OK);
              return GetLastError();
          }
++        SetWindowPos(hwnd, HWND_TOP, 0, 0, initialWidth, initialHeight, SWP_SHOWWINDOW | SWP_FRAMECHANGED);
++        ShowWindow(hwnd, SW_SHOWMAXIMIZED);
++        UpdateWindow(hwnd);
 +        ATOMIC_TRACE("[STEP-1-D3D11] cube.exe: CreateWindowEx OK, hwnd=%p\n", hwnd);
      }
  
      // Create D3D11 Device and Context
-@@ -264,11 +266,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
+@@ -264,11 +257,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
          creationFlags |= D3D11_CREATE_DEVICE_DEBUG;
          #endif
  
@@ -866,7 +898,7 @@ index 000d75a..ec19d8c 100644
          if(FAILED(hResult)){
              MessageBoxA(0, "D3D11CreateDevice() failed", "Fatal Error", MB_OK);
              return GetLastError();
-@@ -339,7 +344,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
+@@ -339,7 +335,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
          d3d11SwapChainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
          d3d11SwapChainDesc.Flags = 0;
  
@@ -877,7 +909,7 @@ index 000d75a..ec19d8c 100644
          assert(SUCCEEDED(hResult));
  
          dxgiFactory->Release();
-@@ -349,6 +357,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
+@@ -349,6 +348,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
      ID3D11RenderTargetView* d3d11FrameBufferView;
      ID3D11DepthStencilView* depthBufferView;
      win32CreateD3D11RenderTargets(d3d11Device, d3d11SwapChain, &d3d11FrameBufferView, &depthBufferView);
@@ -886,7 +918,7 @@ index 000d75a..ec19d8c 100644
  
      UINT shaderCompileFlags = 0;
      // Compiling with this flag allows debugging shaders with Visual Studio
-@@ -779,7 +789,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
+@@ -779,7 +780,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
              }
          }
  
