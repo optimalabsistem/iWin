@@ -16489,11 +16489,19 @@ NTSTATUS WINAPI NtQueryVirtualMemory( HANDLE process, LPCVOID addr,
                         /* lowercase for substr matching */
                         for (char *p = ascii; *p; p++)
                             if (*p >= 'A' && *p <= 'Z') *p += 'a' - 'A';
+                        if (strstr(ascii, "winemetal"))
+                        {
+                            dprintf(2, "[unixlib] MemoryWineLoadUnixLibByName %s -> dxmt_winemetal_unix_call_funcs\n", ascii);
+                            res[0] = (UINT64)(UINT_PTR)1; /* magic non-NULL handle */
+                            res[1] = (UINT64)(UINT_PTR)dxmt_winemetal_unix_call_funcs;
+                            memcpy( buffer, res, min( len, sizeof(res) ));
+                            return STATUS_SUCCESS;
+                        }
                         if (strstr(ascii, "wineios") || strstr(ascii, "winecoreaudio") ||
                             strstr(ascii, "winealsa") || strstr(ascii, "winepulse") ||
                             strstr(ascii, "wineoss"))
                         {
-                            ERR("iOS: MemoryWineLoadUnixLibByName %s -> audio_null_ios stub table\n", ascii);
+                            dprintf(2, "[unixlib] MemoryWineLoadUnixLibByName %s -> audio_null_ios stub table\n", ascii);
                             res[0] = (UINT64)(UINT_PTR)1; /* magic non-NULL handle */
                             res[1] = (UINT64)(UINT_PTR)audio_null_ios_unix_call_funcs;
                             memcpy( buffer, res, min( len, sizeof(res) ));
