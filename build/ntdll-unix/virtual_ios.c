@@ -5479,6 +5479,12 @@ static NTSTATUS load_builtin_unixlib( void *module, BOOL wow, const void **funcs
      * table instead of the dummy stub. */
     if (status == STATUS_DLL_NOT_FOUND)
     {
+        if (!module) {
+            *funcs = (const void *)dxmt_winemetal_unix_call_funcs;
+            dprintf(2, "[unixlib] module NULL fallback -> dxmt_winemetal_unix_call_funcs (%p)\n",
+                    dxmt_winemetal_unix_call_funcs);
+            return STATUS_SUCCESS;
+        }
         /* unix_path may not be set on iOS (our loader doesn't always call
          * set_builtin_unixlib_name), so fall back to reading the DLL name
          * from the PE export directory. */

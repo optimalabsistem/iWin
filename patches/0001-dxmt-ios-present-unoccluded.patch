@@ -734,6 +734,26 @@ index c7cee90..6e8bffd 100644
  }
  
  } // namespace dxmt::wsi
+diff --git a/src/winemetal/main.c b/src/winemetal/main.c
+index 8c7e00f..2d370d2 100644
+--- a/src/winemetal/main.c
++++ b/src/winemetal/main.c
+@@ -1,13 +1,11 @@
+-#include "windef.h"
+-#include "winbase.h"
+-#include "wineunixlib.h"
++extern NTSTATUS WINAPI __wine_init_unix_call_with_instance(HINSTANCE instance);
+ 
+ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved) {
+   if (reason != DLL_PROCESS_ATTACH)
+     return TRUE;
+ 
+   DisableThreadLibraryCalls(instance);
+-  return !__wine_init_unix_call();
++  return !__wine_init_unix_call_with_instance(instance);
+ }
+ 
+ extern BOOL WINAPI DllMainCRTStartup(HANDLE hDllHandle, DWORD dwReason,
 diff --git a/src/winemetal/unix/winemetal_unix.c b/src/winemetal/unix/winemetal_unix.c
 index 30cb25d..a610bcd 100644
 --- a/src/winemetal/unix/winemetal_unix.c
