@@ -20,8 +20,8 @@
      - Tambah step kompilasi otomatis `build/d3d11-triangle/build.sh`.
   4. `patch_repo/`:
      - Bersihkan file stale agar aplikasi iOS tidak meng-overwrite bundle binary dengan file lama via OTA.
-- **Web Live Logs**: `https://better-kennedy-deemed-knife.trycloudflare.com/logs`
-- **Telemetry Endpoint Aktif**: `https://better-kennedy-deemed-knife.trycloudflare.com/log` (HTTP port 8080)
+- **Web Live Logs**: `https://zero-exploring-trailer-manufactured.trycloudflare.com/logs`
+- **Telemetry Endpoint Aktif**: `https://zero-exploring-trailer-manufactured.trycloudflare.com/log` (HTTP port 8080)
 
 ## Langkah berikutnya
 1. Monitor build Codemagic sampai selesai
