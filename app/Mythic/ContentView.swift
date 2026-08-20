@@ -41,7 +41,7 @@ final class MetalHostView: UIView {
         contentScaleFactor = UIScreen.main.scale
         layer.zPosition = 999
         metalLayer.zPosition = 999
-        metalLayer.backgroundColor = UIColor(red: 0.1, green: 0.35, blue: 0.95, alpha: 1.0).cgColor
+        metalLayer.backgroundColor = UIColor.clear.cgColor
         metalLayer.device = MTLCreateSystemDefaultDevice()
         metalLayer.pixelFormat = .bgra8Unorm
         metalLayer.framebufferOnly = false
@@ -154,7 +154,7 @@ final class MetalBackedView: UIView {
         host.metalLayer.frame = host.bounds
         host.layer.zPosition = 999
         host.metalLayer.zPosition = 999
-        host.metalLayer.backgroundColor = UIColor(red: 0.1, green: 0.35, blue: 0.95, alpha: 1.0).cgColor
+        host.metalLayer.backgroundColor = UIColor.clear.cgColor
         host.isHidden = false
         self.bringSubviewToFront(host)
         let full = convert(effectiveBounds, to: w)
@@ -178,7 +178,7 @@ final class MetalBackedView: UIView {
         host.metalLayer.frame = host.bounds
         host.layer.zPosition = 999
         host.metalLayer.zPosition = 999
-        host.metalLayer.backgroundColor = UIColor(red: 0.1, green: 0.35, blue: 0.95, alpha: 1.0).cgColor
+        host.metalLayer.backgroundColor = UIColor.clear.cgColor
         self.bringSubviewToFront(host)
         let scale = window?.screen.scale ?? UIScreen.main.scale
         host.metalLayer.drawableSize = CGSize(
