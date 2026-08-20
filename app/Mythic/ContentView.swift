@@ -1742,6 +1742,7 @@ struct ContentView: View {
         setenv("MYTHIC_DESKTOP", "1", 1)
         setenv("MYTHIC_SCREEN_W", String(w), 1)
         setenv("MYTHIC_SCREEN_H", String(h), 1)
+        setenv("WINEDLLOVERRIDES", "d3d11=n,b;dxgi=n,b;winemetal=n,b", 1)
         unsetenv("MYTHIC_USE_ARM64EC")
         selectedTab = .screen
         runWineFullSequence()
