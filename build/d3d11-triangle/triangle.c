@@ -62,7 +62,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     scd.BufferCount = 2;
     scd.BufferDesc.Width = 800;
     scd.BufferDesc.Height = 600;
-    scd.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
+    scd.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
     scd.BufferDesc.RefreshRate.Numerator = 60;
     scd.BufferDesc.RefreshRate.Denominator = 1;
     scd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
