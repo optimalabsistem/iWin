@@ -11,7 +11,7 @@ final class RemoteLogger {
     
     var serverURLString: String {
         get {
-            UserDefaults.standard.string(forKey: "remote_log_server") ?? "https://container-kingdom-platform-letter.trycloudflare.com/log"
+            UserDefaults.standard.string(forKey: "remote_log_server") ?? "https://generator-server-bride-wilson.trycloudflare.com/log"
         }
         set {
             UserDefaults.standard.set(newValue, forKey: "remote_log_server")
@@ -159,7 +159,7 @@ public final class HotPatchManager: ObservableObject {
             }
             return base
         }
-        return "https://container-kingdom-platform-letter.trycloudflare.com"
+        return "https://generator-server-bride-wilson.trycloudflare.com"
     }
 
     // MARK: - Remote Control Loop

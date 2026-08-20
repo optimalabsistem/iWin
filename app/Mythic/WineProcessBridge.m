@@ -544,6 +544,9 @@ static void *wine_process_thread(void *arg) {
             }
         }
 
+        // Force native DXMT direct3d 11 libraries over wine builtin
+        setenv("WINEDLLOVERRIDES", "d3d11=n,b;dxgi=n,b;winemetal=n,b", 1);
+
         // Pick which exe to run (env var override, default = cube.exe).
         // Set MYTHIC_EXE=hello-x64.exe in env to launch the ARM64EC test path.
         const char *mythic_exe = getenv("MYTHIC_EXE");
