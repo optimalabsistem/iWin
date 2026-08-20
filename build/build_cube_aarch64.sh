@@ -33,9 +33,15 @@ if [ -f "$REPO_ROOT/build/dxmt-tests/out-x64/cube/cube_blobs.c" ]; then
 fi
 
 if [ -n "$CXX" ] && [ -x "$CXX" ]; then
-    echo "==> Compiling aarch64 cube.exe with 16K section alignment and STEP logging"
+    CUBE_SRC="$DXMT_TESTS/dx11_cube.cpp"
+    if [ -f "$REPO_ROOT/build/dxmt-tests/dx11_cube.cpp" ]; then
+        CUBE_SRC="$REPO_ROOT/build/dxmt-tests/dx11_cube.cpp"
+    fi
+
+    echo "==> Compiling aarch64 cube.exe with 16K section alignment and STEP logging from $CUBE_SRC"
     "$CXX" -o "$OUT/cube.exe" \
         -Wl,--section-alignment=0x4000 \
+        -mwindows \
         -I "$DXMT_DIRECTX" \
         -I "$REPO_ROOT/build/dxmt-tests" \
         -I "$DXMT_TESTS" \
@@ -43,7 +49,7 @@ if [ -n "$CXX" ] && [ -x "$CXX" ]; then
         -std=c++17 -O2 \
         -Wno-int-conversion -Wno-null-conversion -Wno-c++11-narrowing \
         -static -static-libgcc -static-libstdc++ \
-        "$DXMT_TESTS/dx11_cube.cpp" \
+        "$CUBE_SRC" \
         "$OUT/cube_blobs.c" \
         -ld3d11 -ldxgi -luuid -lwinmm
 

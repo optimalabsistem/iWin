@@ -5,6 +5,8 @@
 //
 // Cross-compiled as aarch64-windows PE for use inside Mythic's Wine.
 
+#define COBJMACROS
+#include <initguid.h>
 #include <windows.h>
 #include <d3d11.h>
 #include <dxgi.h>
@@ -28,18 +30,32 @@ static void debug_log(const char *msg) {
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    (void)hPrevInstance; (void)lpCmdLine; (void)nCmdShow;
     debug_log("[3D-TEST] starting Direct3D 11 test");
+
+    if (!hInstance) hInstance = GetModuleHandleA(NULL);
 
     WNDCLASSA wc = {0};
     wc.lpfnWndProc = wndproc;
-    wc.hInstance = hInstance ? hInstance : GetModuleHandleA(NULL);
+    wc.hInstance = hInstance;
     wc.lpszClassName = g_class_name;
-    RegisterClassA(&wc);
+    if (!RegisterClassA(&wc)) {
+        char errbuf[128];
+        snprintf(errbuf, sizeof(errbuf), "[3D-TEST] RegisterClassA failed: 0x%lx", GetLastError());
+        debug_log(errbuf);
+    }
 
     HWND hwnd = CreateWindowExA(0, g_class_name, "Mythic D3D11 Test",
-                                WS_OVERLAPPEDWINDOW, 0, 0, 800, 600,
-                                NULL, NULL, wc.hInstance, NULL);
+                                WS_POPUP | WS_VISIBLE, 0, 0, 800, 600,
+                                NULL, NULL, hInstance, NULL);
+    if (!hwnd) {
+        char errbuf[128];
+        snprintf(errbuf, sizeof(errbuf), "[3D-TEST] CreateWindowExA failed: 0x%lx", GetLastError());
+        debug_log(errbuf);
+        return 1;
+    }
     ShowWindow(hwnd, SW_SHOW);
+    UpdateWindow(hwnd);
     debug_log("[3D-TEST] Window created successfully");
 
     DXGI_SWAP_CHAIN_DESC scd = {0};
@@ -63,24 +79,51 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, 0,
         fls, 1, D3D11_SDK_VERSION,
         &scd, &swap, &device, &fl_out, &ctx);
-    if (FAILED(hr)) {
+    if (FAILED(hr) || !device || !swap || !ctx) {
         char errbuf[128];
-        snprintf(errbuf, sizeof(errbuf), "[3D-TEST] D3D11CreateDeviceAndSwapChain failed 0x%lx", hr);
+        snprintf(errbuf, sizeof(errbuf), "[3D-TEST] D3D11CreateDeviceAndSwapChain failed 0x%lx (device=%p swap=%p ctx=%p)",
+                 hr, device, swap, ctx);
         debug_log(errbuf);
         return 1;
     }
     debug_log("[3D-TEST] D3D11 Device + SwapChain created successfully");
 
     ID3D11Texture2D *backbuf = NULL;
-    swap->lpVtbl->GetBuffer(swap, 0, &IID_ID3D11Texture2D, (void **)&backbuf);
+    hr = swap->lpVtbl->GetBuffer(swap, 0, &IID_ID3D11Texture2D, (void **)&backbuf);
+    if (FAILED(hr) || !backbuf) {
+        char errbuf[128];
+        snprintf(errbuf, sizeof(errbuf), "[3D-TEST] GetBuffer failed 0x%lx (backbuf=%p)", hr, backbuf);
+        debug_log(errbuf);
+        return 1;
+    }
+
     ID3D11RenderTargetView *rtv = NULL;
-    device->lpVtbl->CreateRenderTargetView(device, (ID3D11Resource *)backbuf, NULL, &rtv);
+    hr = device->lpVtbl->CreateRenderTargetView(device, (ID3D11Resource *)backbuf, NULL, &rtv);
+    backbuf->lpVtbl->Release(backbuf);
+    if (FAILED(hr) || !rtv) {
+        char errbuf[128];
+        snprintf(errbuf, sizeof(errbuf), "[3D-TEST] CreateRenderTargetView failed 0x%lx (rtv=%p)", hr, rtv);
+        debug_log(errbuf);
+        return 1;
+    }
 
     // Create shaders from pre-compiled DXBC blobs.
     ID3D11VertexShader *vs = NULL;
     ID3D11PixelShader  *ps = NULL;
-    device->lpVtbl->CreateVertexShader(device, vs_dxbc, vs_dxbc_len, NULL, &vs);
-    device->lpVtbl->CreatePixelShader (device, ps_dxbc, ps_dxbc_len, NULL, &ps);
+    hr = device->lpVtbl->CreateVertexShader(device, vs_dxbc, vs_dxbc_len, NULL, &vs);
+    if (FAILED(hr) || !vs) {
+        char errbuf[128];
+        snprintf(errbuf, sizeof(errbuf), "[3D-TEST] CreateVertexShader failed 0x%lx", hr);
+        debug_log(errbuf);
+        return 1;
+    }
+    hr = device->lpVtbl->CreatePixelShader (device, ps_dxbc, ps_dxbc_len, NULL, &ps);
+    if (FAILED(hr) || !ps) {
+        char errbuf[128];
+        snprintf(errbuf, sizeof(errbuf), "[3D-TEST] CreatePixelShader failed 0x%lx", hr);
+        debug_log(errbuf);
+        return 1;
+    }
     debug_log("[3D-TEST] Shaders created successfully");
 
     // Input layout matches the VS signature (POSITION + COLOR).
@@ -89,7 +132,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         { "COLOR",    0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
     };
     ID3D11InputLayout *layout = NULL;
-    device->lpVtbl->CreateInputLayout(device, il, 2, vs_dxbc, vs_dxbc_len, &layout);
+    hr = device->lpVtbl->CreateInputLayout(device, il, 2, vs_dxbc, vs_dxbc_len, &layout);
+    if (FAILED(hr) || !layout) {
+        char errbuf[128];
+        snprintf(errbuf, sizeof(errbuf), "[3D-TEST] CreateInputLayout failed 0x%lx", hr);
+        debug_log(errbuf);
+        return 1;
+    }
 
     // Classic "RGB at each vertex" triangle in NDC.
     struct Vertex tri[] = {
@@ -103,7 +152,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     };
     D3D11_SUBRESOURCE_DATA vb_init = { .pSysMem = tri };
     ID3D11Buffer *vb = NULL;
-    device->lpVtbl->CreateBuffer(device, &vb_desc, &vb_init, &vb);
+    hr = device->lpVtbl->CreateBuffer(device, &vb_desc, &vb_init, &vb);
+    if (FAILED(hr) || !vb) {
+        char errbuf[128];
+        snprintf(errbuf, sizeof(errbuf), "[3D-TEST] CreateBuffer failed 0x%lx", hr);
+        debug_log(errbuf);
+        return 1;
+    }
 
     D3D11_VIEWPORT vp = { 0, 0, 800.0f, 600.0f, 0.0f, 1.0f };
     const float clear[] = { 0.1f, 0.15f, 0.2f, 1.0f };
@@ -145,5 +200,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 }
 
 int main(int argc, char **argv) {
+    (void)argc; (void)argv;
     return WinMain(GetModuleHandleA(NULL), NULL, GetCommandLineA(), SW_SHOWDEFAULT);
 }

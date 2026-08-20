@@ -1,33 +1,35 @@
 # RESUME STATE — iWin/Mythic
 
 > File handoff antar sesi Freebuff. **Baca di awal sesi baru**, **update di akhir sesi**.
-> Diperbarui: 2026-08-20 (sesi: Fix ROUND_SIZE PE Section Mapping & Trigger Codemagic Build)
+> Diperbarui: 2026-08-20 (sesi: Robust WinMain & D3D11 Initialization for Cube & Triangle)
 
 ## Status terakhir
 - **Fix Terkini**:
-  1. `build/ntdll-unix/virtual_ios.c`: Fix bug kalkulasi `ROUND_SIZE` pada `.data` & `.bss` mapping (`map_image_into_view` & `virtual_create_builtin_view`). Mengganti `(uintptr_t)sec_addr` dan `(uintptr_t)((char *)base + sec[i].VirtualAddress)` dengan `sec[si].VirtualAddress` (relatif terhadap image base), sehingga section `.data` biner PE mendapatkan proteksi memori `PROT_READ | PROT_WRITE` yang valid di iOS kernel.
+  1. `research/dxmt/tests/dx11/dx11_cube.cpp` & `build/dxmt-tests/dx11_cube.cpp`:
+     - Fix `hInstance` fallback via `GetModuleHandleW(NULL)` jika dipanggil dengan `NULL`.
+     - Hapus semua blocking `MessageBoxA(...)` yang menyebabkan thread Windows hang/beku di iOS.
+     - Tambah `[STEP-1-D3D11] cube.exe: WinMain entered!` di awal fungsi.
+     - Tambah `extern "C" int main(...)` wrapper.
+  2. `build/d3d11-triangle/triangle.c` & `build/d3d11-triangle/build.sh`:
+     - Tambah `#include <initguid.h>` agar `IID_ID3D11Texture2D` terdefinisi dan `GetBuffer` tidak crash.
+     - Tambah guard & HRESULT checks lengkap di semua tahap D3D11 (`GetBuffer`, `CreateRenderTargetView`, `CreateVertexShader`, `CreatePixelShader`, `CreateInputLayout`, `CreateBuffer`).
+     - Tambah flag `-mwindows` dan `-Wl,--section-alignment=0x4000`.
+     - Generate `vs_dxbc.h` dan `ps_dxbc.h` pre-compiled shaders.
+  3. `build/build_cube_aarch64.sh` & `codemagic.yaml`:
+     - Tambah `-mwindows` flag.
+     - Tambah step kompilasi otomatis `build/d3d11-triangle/build.sh`.
+  4. `patch_repo/`:
+     - Bersihkan file stale agar aplikasi iOS tidak meng-overwrite bundle binary dengan file lama via OTA.
 - **Web Live Logs**: `https://relations-ing-diversity-formerly.trycloudflare.com/logs`
 - **Telemetry Endpoint Aktif**: `https://relations-ing-diversity-formerly.trycloudflare.com/log` (HTTP port 8080)
 
-## Fitur Build Sebelumnya:
-1. `build/d3d11-triangle/triangle.c`: Entry point ganda `WinMain` + `main` standar Win32 GUI murni.
-2. `build/d3d11-triangle/triangle.c`: Format swapchain `DXGI_FORMAT_B8G8R8A8_UNORM_SRGB` (standar resmi DXMT) & `Present(0, 0)` immediate commit.
-3. `app/Mythic/ContentView.swift` & `WineProcessBridge.m`: `WINEDLLOVERRIDES="d3d11=n,b;dxgi=n,b;winemetal=n,b;libc++=n,b;libunwind=n,b"`.
-4. `app/Mythic/RemoteLogger.swift`: Real-time POSIX STDERR redirection langsung ke Web Live Logs.
-5. `app/Mythic/ContentView.swift`: Eksekusi Direct in-process tunggal untuk biner 3D.
-6. `app/Mythic/ContentView.swift`: Background `CAMetalLayer` transparan (`UIColor.clear.cgColor`).
-
 ## Langkah berikutnya
-1. Tunggu build Codemagic selesai dan unduh `iWin.ipa`
-2. Pasang di iPad dan jalankan pengujian 3D Cube / Triangle
-3. Verifikasi log: `[STEP-1-D3D11] cube.exe: CreateWindowEx OK` dan `Present` frame count bertambah
+1. Monitor build Codemagic sampai selesai
+2. Berikan file `iWin.ipa` baru ke user
+3. Uji kembali 3D Cube & 3D Triangle dan verifikasi render loop logs `[STEP-3-RENDER-LOOP] presented frame=...`
 
 ## Rule penting (jangan dilanggar)
 - **Jangan edit submodule `wine/` atau `FEX/` langsung** — edit source of truth: `build/ntdll-unix/`, `build/win32u-unix/`, `build/wineserver/`, `app/Mythic/`
 - Start Menu harus bersih (hanya `Run...` + `Exit Desktop`) — jangan taruh file di `Start Menu/Programs`
 - Jangan cross-link DLL arm64ec (mis. `uxtheme.dll`) ke sesi aarch64 native — `status=0xc000007b`
 - Setelah patch: commit + push `origin main` → trigger Codemagic (App ID `6a8589ee4049aa8ea251422c`, workflow `ios-iwin-workflow`) → monitor `monitor_build.py` → beri link artifact ke user
-
-## Telemetry
-- Server: `https://relations-ing-diversity-formerly.trycloudflare.com/log` & `http://3.1.51.240:8080/log`
-- Log lokal: `live_logs.txt` (monitor via `server_logger.py`)

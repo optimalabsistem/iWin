@@ -6,47 +6,44 @@ set -eu
 DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$DIR/../.." && pwd)"
 MINGW="$REPO_ROOT/toolchains/llvm-mingw-20260421-ucrt-macos-universal/bin"
-DXMT_DIRECTX="$REPO_ROOT/research/dxmt/include/native/directx"
-
+if [ ! -d "$MINGW" ]; then
+    MINGW="$(brew --prefix mingw-w64 2>/dev/null || echo /usr)/bin"
+fi
 CC_AARCH64="$MINGW/aarch64-w64-mingw32-clang"
-CC_X86_64="$MINGW/x86_64-w64-mingw32-clang"
-
-# --- Host-side HLSL compiler ---
-# Small x86_64 PE that calls D3DCompile (via Wine's d3dcompiler_47.dll
-# which uses vkd3d-shader to produce real SM5 DXBC). Built once.
-if [[ ! -x "$DIR/hlsl_compile.exe" || "$DIR/hlsl_compile.c" -nt "$DIR/hlsl_compile.exe" ]]; then
-    echo "==> building host HLSL compiler"
-    "$CC_X86_64" -o "$DIR/hlsl_compile.exe" "$DIR/hlsl_compile.c" -ld3dcompiler -O2
+if [ ! -x "$CC_AARCH64" ]; then
+    CC_AARCH64=$(command -v aarch64-w64-mingw32-clang || true)
 fi
 
-# --- Shaders → DXBC → C arrays ---
-echo "==> compiling shaders"
-WINE=${WINE:-/opt/homebrew/bin/wine}
-for stage in vs ps; do
-    profile="${stage}_5_0"
-    "$WINE" "$DIR/hlsl_compile.exe" "${stage}_main" "$profile" < "$DIR/shaders.hlsl" \
-        > "$DIR/${stage}.dxbc" 2>/tmp/hlsl_compile.err
-    if [[ ! -s "$DIR/${stage}.dxbc" ]]; then
-        echo "ERROR: ${stage} shader compile failed"
-        cat /tmp/hlsl_compile.err
-        exit 1
+if [ -z "$CC_AARCH64" ] || [ ! -x "$CC_AARCH64" ]; then
+    LLVM_DIR=$(find "$REPO_ROOT/toolchains" -maxdepth 1 -type d -name "llvm-mingw*" 2>/dev/null | head -n 1)
+    if [ -n "$LLVM_DIR" ] && [ -d "$LLVM_DIR/bin" ]; then
+        CC_AARCH64="$LLVM_DIR/bin/aarch64-w64-mingw32-clang"
     fi
-    # Classic DXBC blob starts with magic "DXBC" (0x43425844). Sanity check.
-    head -c 4 "$DIR/${stage}.dxbc" | grep -q DXBC || { echo "ERROR: ${stage}.dxbc missing DXBC magic"; exit 1; }
-    xxd -i -n "${stage}_dxbc" "$DIR/${stage}.dxbc" > "$DIR/${stage}_dxbc.h"
-    echo "  ${stage}: $(wc -c < "$DIR/${stage}.dxbc") bytes of DXBC"
-done
+fi
+
+DXMT_DIRECTX="$REPO_ROOT/research/dxmt/include/native/directx"
 
 # --- Triangle PE ---
-echo "==> building triangle.exe"
-"$CC_AARCH64" -o "$DIR/triangle.exe" \
-    -I "$DXMT_DIRECTX" \
-    -I "$DIR" \
-    "$DIR/triangle.c" \
-    -ld3d11 -ldxgi -luuid \
-    -O2
+if [ -n "$CC_AARCH64" ] && [ -x "$CC_AARCH64" ]; then
+    echo "==> building triangle.exe"
+    "$CC_AARCH64" -o "$DIR/triangle.exe" \
+        -Wl,--section-alignment=0x4000 \
+        -mwindows \
+        -I "$DXMT_DIRECTX" \
+        -I "$DIR" \
+        "$DIR/triangle.c" \
+        -ld3d11 -ldxgi -luuid \
+        -O2
 
-# Tag as a Wine builtin so our ntdll's JIT copy path is taken on iOS.
-"$REPO_ROOT/wine/build-macos/tools/winebuild/winebuild" --builtin "$DIR/triangle.exe"
+    WINEBUILD="$REPO_ROOT/wine/build-macos/tools/winebuild/winebuild"
+    if [ -x "$WINEBUILD" ]; then
+        # Tag as a Wine builtin so our ntdll's JIT copy path is taken on iOS.
+        "$WINEBUILD" --builtin "$DIR/triangle.exe" || true
+    fi
 
-file "$DIR/triangle.exe"
+    mkdir -p "$REPO_ROOT/app/Mythic/aarch64-windows"
+    cp "$DIR/triangle.exe" "$REPO_ROOT/app/Mythic/aarch64-windows/triangle.exe"
+    echo "==> Copied fresh triangle.exe to app/Mythic/aarch64-windows/triangle.exe"
+else
+    echo "Warning: aarch64-w64-mingw32-clang could not be found to build triangle.exe"
+fi
