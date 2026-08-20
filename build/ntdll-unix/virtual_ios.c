@@ -12674,14 +12674,16 @@ void virtual_map_user_shared_data(void)
 
     if ((status = NtOpenSection( &section, SECTION_ALL_ACCESS, &attr )))
     {
-        ERR( "failed to open the USD section: %08x\n", status );
-        exit(1);
+        virtual_init_user_shared_data();
+        return;
     }
     if ((res = server_get_unix_fd( section, 0, &fd, &needs_close, NULL, NULL )) ||
         (user_shared_data != mmap( user_shared_data, page_size, PROT_READ, MAP_SHARED|MAP_FIXED, fd, 0 )))
     {
         ERR( "failed to remap the process USD: %d\n", res );
-        exit(1);
+        if (needs_close) close( fd );
+        NtClose( section );
+        return;
     }
     if (needs_close) close( fd );
     NtClose( section );
@@ -12700,24 +12702,61 @@ void virtual_init_user_shared_data(void)
     SYSTEM_BASIC_INFORMATION info;
     KUSER_SHARED_DATA *data;
     unsigned int status;
-    HANDLE section;
+    HANDLE section = 0;
     int res, fd, needs_close;
 
     if ((status = NtOpenSection( &section, SECTION_ALL_ACCESS, &attr )))
     {
-        ERR( "failed to open the USD section: %08x\n", status );
-        exit(1);
+        LARGE_INTEGER size = { .QuadPart = page_size };
+        status = NtCreateSection( &section, SECTION_ALL_ACCESS, &attr, &size, PAGE_READWRITE, SEC_COMMIT, 0 );
+        if (status)
+        {
+            ERR( "failed to create the USD section: %08x\n", status );
+            return;
+        }
     }
     if ((res = server_get_unix_fd( section, 0, &fd, &needs_close, NULL, NULL )) ||
         (data = mmap( NULL, sizeof(*data), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0 )) == MAP_FAILED)
     {
         ERR( "failed to remap the process USD: %d\n", res );
-        exit(1);
+        if (section) NtClose( section );
+        return;
     }
     if (needs_close) close( fd );
     NtClose( section );
 
     virtual_get_system_info( &info, FALSE );
+    data->NumberOfPhysicalPages = info.MmNumberOfPhysicalPages;
+    data->SharedDataFlags.DbgErrorPortPresent = TRUE;
+    data->SharedDataFlags.DbgElevationEnabled = TRUE;
+    data->SharedDataFlags.VirtualizationFlags = 3;
+    data->SharedDataFlags.DbgMultiSessionSku = TRUE;
+    data->SharedDataFlags.DbgSystemStoreProvider = TRUE;
+    data->SharedDataFlags.DbgDynProcessorEnabled = TRUE;
+    data->SharedDataFlags.DbgSecureBootEnabled = TRUE;
+    data->SharedDataFlags.DbgVirtualMachine = FALSE;
+    data->SharedDataFlags.DbgSysCallTraceEnabled = FALSE;
+    data->SharedDataFlags.DbgSystemSipApproved = TRUE;
+    data->MaxArrayDimension = 0x1000;
+    data->LargePageMinimum = 0x200000;
+    data->NtSystemRoot[0] = 'C';
+    data->NtSystemRoot[1] = ':';
+    data->NtSystemRoot[2] = '\\';
+    data->NtSystemRoot[3] = 'w';
+    data->NtSystemRoot[4] = 'i';
+    data->NtSystemRoot[5] = 'n';
+    data->NtSystemRoot[6] = 'd';
+    data->NtSystemRoot[7] = 'o';
+    data->NtSystemRoot[8] = 'w';
+    data->NtSystemRoot[9] = 's';
+    data->NtProductType = NtProductWinNt;
+    data->ProductTypeIsValid = TRUE;
+    data->NtMajorVersion = 10;
+    data->NtMinorVersion = 0;
+    data->NtBuildNumber = 19044;
+    data->KdDebuggerEnabled = 0;
+
+    user_shared_data = data;
 
     data->TickCountMultiplier   = 1 << 24;
     data->LargePageMinimum      = 2 * 1024 * 1024;

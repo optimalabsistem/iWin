@@ -1748,17 +1748,29 @@ struct ContentView: View {
         runWineFullSequence()
     }
 
-    private func launchStandalone3DTest(_ exeName: String = "cube.exe") {
+    private func launchStandalone3DTest(_ exeName: String = "triangle.exe") {
+        let parts = desktopResolution.split(separator: "x")
+        let w = parts.count == 2 ? (Int(parts[0]) ?? 1280) : 1280
+        let h = parts.count == 2 ? (Int(parts[1]) ?? 720) : 720
+        winios_teardown_compositor()
+
         var targetExe = exeName
         if wineEngineMode == "arm64ec_x64" {
-            if exeName == "cube.exe" { targetExe = "cube-x64.exe" }
+            if exeName == "cube.exe" || exeName == "triangle.exe" { targetExe = "cube-x64.exe" }
             setenv("MYTHIC_USE_ARM64EC", "1", 1)
         } else {
             setenv("MYTHIC_USE_ARM64EC", "0", 1)
         }
+
+        setenv("MYTHIC_EXE", targetExe, 1)
         setenv("WINEDLLOVERRIDES", "d3d11=n,b;dxgi=n,b;winemetal=n,b", 1)
-        LogStore.shared.log("[STEP-0-UI] launchStandalone3DTest (Seamless Desktop Wrapper): targetExe=\(targetExe)", level: .info)
-        launchDirectApp(targetExe)
+        unsetenv("MYTHIC_ARGS")
+        unsetenv("MYTHIC_DESKTOP")
+        setenv("MYTHIC_SCREEN_W", String(w), 1)
+        setenv("MYTHIC_SCREEN_H", String(h), 1)
+        LogStore.shared.log("[STEP-0-UI] launchStandalone3DTest: Direct targetExe=\(targetExe) mode=\(wineEngineMode) resolution=\(w)x\(h)", level: .info)
+        selectedTab = .screen
+        runWineFullSequence()
     }
 
     private func launchDirectApp(_ exeName: String, args: String? = nil) {
