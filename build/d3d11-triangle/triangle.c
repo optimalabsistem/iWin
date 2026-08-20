@@ -22,26 +22,31 @@ static LRESULT CALLBACK wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
 struct Vertex { float x, y, z; float r, g, b; };
 
-int main(int argc, char **argv) {
-    fprintf(stderr, "[triangle] starting (vs=%u ps=%u bytes)\n",
-            (unsigned)vs_dxbc_len, (unsigned)ps_dxbc_len);
+static void debug_log(const char *msg) {
+    OutputDebugStringA(msg);
+    fprintf(stderr, "%s\n", msg);
+}
+
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    debug_log("[3D-TEST] starting Direct3D 11 test");
 
     WNDCLASSA wc = {0};
     wc.lpfnWndProc = wndproc;
-    wc.hInstance = GetModuleHandleA(NULL);
+    wc.hInstance = hInstance ? hInstance : GetModuleHandleA(NULL);
     wc.lpszClassName = g_class_name;
     RegisterClassA(&wc);
 
-    HWND hwnd = CreateWindowExA(0, g_class_name, "Mythic D3D11 Triangle",
+    HWND hwnd = CreateWindowExA(0, g_class_name, "Mythic D3D11 Test",
                                 WS_OVERLAPPEDWINDOW, 0, 0, 800, 600,
                                 NULL, NULL, wc.hInstance, NULL);
     ShowWindow(hwnd, SW_SHOW);
+    debug_log("[3D-TEST] Window created successfully");
 
     DXGI_SWAP_CHAIN_DESC scd = {0};
     scd.BufferCount = 2;
     scd.BufferDesc.Width = 800;
     scd.BufferDesc.Height = 600;
-    scd.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    scd.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
     scd.BufferDesc.RefreshRate.Numerator = 60;
     scd.BufferDesc.RefreshRate.Denominator = 1;
     scd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
@@ -58,8 +63,13 @@ int main(int argc, char **argv) {
         NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, 0,
         fls, 1, D3D11_SDK_VERSION,
         &scd, &swap, &device, &fl_out, &ctx);
-    if (FAILED(hr)) { fprintf(stderr, "[triangle] CreateDevice+Swap failed 0x%lx\n", hr); return 1; }
-    fprintf(stderr, "[triangle] device created, feature_level=0x%x\n", fl_out);
+    if (FAILED(hr)) {
+        char errbuf[128];
+        snprintf(errbuf, sizeof(errbuf), "[3D-TEST] D3D11CreateDeviceAndSwapChain failed 0x%lx", hr);
+        debug_log(errbuf);
+        return 1;
+    }
+    debug_log("[3D-TEST] D3D11 Device + SwapChain created successfully");
 
     ID3D11Texture2D *backbuf = NULL;
     swap->lpVtbl->GetBuffer(swap, 0, &IID_ID3D11Texture2D, (void **)&backbuf);
@@ -71,7 +81,7 @@ int main(int argc, char **argv) {
     ID3D11PixelShader  *ps = NULL;
     device->lpVtbl->CreateVertexShader(device, vs_dxbc, vs_dxbc_len, NULL, &vs);
     device->lpVtbl->CreatePixelShader (device, ps_dxbc, ps_dxbc_len, NULL, &ps);
-    fprintf(stderr, "[triangle] shaders created vs=%p ps=%p\n", (void*)vs, (void*)ps);
+    debug_log("[3D-TEST] Shaders created successfully");
 
     // Input layout matches the VS signature (POSITION + COLOR).
     D3D11_INPUT_ELEMENT_DESC il[] = {
@@ -96,10 +106,10 @@ int main(int argc, char **argv) {
     device->lpVtbl->CreateBuffer(device, &vb_desc, &vb_init, &vb);
 
     D3D11_VIEWPORT vp = { 0, 0, 800.0f, 600.0f, 0.0f, 1.0f };
-    const float clear[] = { 0.1f, 0.15f, 0.2f, 1.0f };  // dark slate background
+    const float clear[] = { 0.1f, 0.15f, 0.2f, 1.0f };
     UINT stride = sizeof(struct Vertex), offset = 0;
 
-    fprintf(stderr, "[triangle] entering continuous render loop\n");
+    debug_log("[3D-TEST] Entering continuous render loop");
     MSG msg;
     BOOL running = TRUE;
     int f = 0;
@@ -120,14 +130,20 @@ int main(int argc, char **argv) {
         ctx->lpVtbl->VSSetShader(ctx, vs, NULL, 0);
         ctx->lpVtbl->PSSetShader(ctx, ps, NULL, 0);
         ctx->lpVtbl->Draw(ctx, 3, 0);
-        swap->lpVtbl->Present(swap, 1, 0);
+        swap->lpVtbl->Present(swap, 0, 0);
 
         f++;
         if (f <= 10 || (f % 60) == 0) {
-            fprintf(stderr, "[triangle] presented frame=%d\n", f);
+            char fbuf[64];
+            snprintf(fbuf, sizeof(fbuf), "[3D-TEST] presented frame=%d", f);
+            debug_log(fbuf);
         }
     }
 
-    fprintf(stderr, "[triangle] exiting cleanly\n");
+    debug_log("[3D-TEST] Exiting cleanly");
     return 0;
+}
+
+int main(int argc, char **argv) {
+    return WinMain(GetModuleHandleA(NULL), NULL, GetCommandLineA(), SW_SHOWDEFAULT);
 }
