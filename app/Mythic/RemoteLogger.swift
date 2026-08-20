@@ -34,10 +34,10 @@ final class RemoteLogger {
         let readSource = DispatchSource.makeReadSource(fileDescriptor: p[0], queue: queue)
         readSource.setEventHandler { [weak self] in
             var buf = [UInt8](repeating: 0, count: 4096)
-            let bytesRead = read(p[0], &buf, buf.count - 1)
+            let bytesRead = read(p[0], &buf, buf.count)
             if bytesRead > 0 {
-                buf[bytesRead] = 0
-                if let str = String(cString: buf, encoding: .utf8) {
+                let data = Data(buf[0..<bytesRead])
+                if let str = String(data: data, encoding: .utf8) {
                     for line in str.split(separator: "\n") {
                         let trimmed = String(line)
                         if !trimmed.isEmpty {
