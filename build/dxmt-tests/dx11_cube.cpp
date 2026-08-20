@@ -138,7 +138,7 @@ bool win32CreateD3D11RenderTargets(ID3D11Device1* d3d11Device, IDXGISwapChain1* 
 
     d3d11FrameBuffer->Release();
 
-    depthBufferDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    depthBufferDesc.Format = DXGI_FORMAT_D32_FLOAT;
     depthBufferDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
 
     ID3D11Texture2D* depthBuffer;
