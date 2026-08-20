@@ -531,14 +531,12 @@ static void *wine_process_thread(void *arg) {
             }
         }
 
-        // Redirect stderr AND stdout to log file so Wine debug output (WINEDEBUG)
-        // and the guest program's printf are both captured.
+        // Redirect stdout to log file; keep stderr connected to RemoteLogger pipe so logs reach live telemetry.
         {
             NSString *docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
             NSString *logPath2 = [docs stringByAppendingPathComponent:@"mythic-log.txt"];
             int logfd = open(logPath2.UTF8String, O_WRONLY | O_CREAT | O_APPEND, 0644);
             if (logfd >= 0) {
-                dup2(logfd, STDERR_FILENO);
                 dup2(logfd, STDOUT_FILENO);
                 close(logfd);
             }

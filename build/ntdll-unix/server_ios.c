@@ -2680,7 +2680,7 @@ void server_init_process_done(void)
     }
     SERVER_END_REQ;
 
-    assert( !status );
+    if (status) ERR("init_process_done failed: 0x%lx\n", (unsigned long)status);
 #ifdef WINE_IOS
     /* On iOS, the parent's PE code (CreateProcessInternalW) should call
      * NtResumeThread to unsuspend the child. But since we use thread-based
