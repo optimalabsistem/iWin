@@ -12726,37 +12726,6 @@ void virtual_init_user_shared_data(void)
     NtClose( section );
 
     virtual_get_system_info( &info, FALSE );
-    data->NumberOfPhysicalPages = info.MmNumberOfPhysicalPages;
-    data->SharedDataFlags.DbgErrorPortPresent = TRUE;
-    data->SharedDataFlags.DbgElevationEnabled = TRUE;
-    data->SharedDataFlags.VirtualizationFlags = 3;
-    data->SharedDataFlags.DbgMultiSessionSku = TRUE;
-    data->SharedDataFlags.DbgSystemStoreProvider = TRUE;
-    data->SharedDataFlags.DbgDynProcessorEnabled = TRUE;
-    data->SharedDataFlags.DbgSecureBootEnabled = TRUE;
-    data->SharedDataFlags.DbgVirtualMachine = FALSE;
-    data->SharedDataFlags.DbgSysCallTraceEnabled = FALSE;
-    data->SharedDataFlags.DbgSystemSipApproved = TRUE;
-    data->MaxArrayDimension = 0x1000;
-    data->LargePageMinimum = 0x200000;
-    data->NtSystemRoot[0] = 'C';
-    data->NtSystemRoot[1] = ':';
-    data->NtSystemRoot[2] = '\\';
-    data->NtSystemRoot[3] = 'w';
-    data->NtSystemRoot[4] = 'i';
-    data->NtSystemRoot[5] = 'n';
-    data->NtSystemRoot[6] = 'd';
-    data->NtSystemRoot[7] = 'o';
-    data->NtSystemRoot[8] = 'w';
-    data->NtSystemRoot[9] = 's';
-    data->NtProductType = NtProductWinNt;
-    data->ProductTypeIsValid = TRUE;
-    data->NtMajorVersion = 10;
-    data->NtMinorVersion = 0;
-    data->NtBuildNumber = 19044;
-    data->KdDebuggerEnabled = 0;
-
-    user_shared_data = data;
 
     data->TickCountMultiplier   = 1 << 24;
     data->LargePageMinimum      = 2 * 1024 * 1024;
