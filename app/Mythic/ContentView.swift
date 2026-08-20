@@ -977,7 +977,7 @@ struct ContentView: View {
     @AppStorage("d3d_renderer") private var d3dRenderer: String = "dxmt_metal"
     @AppStorage("jit_pool_size") private var poolSizeSetting: Int = 384
     @State private var logSearchText: String = ""
-    @AppStorage("remote_log_server") private var remoteLogServer: String = "https://generator-server-bride-wilson.trycloudflare.com/log"
+    @AppStorage("remote_log_server") private var remoteLogServer: String = "https://zen-toe-throw-with.trycloudflare.com/log"
     @State private var serverTestStatus: String = ""
     @State private var isTestingServer: Bool = false
     @ObservedObject private var patchManager = HotPatchManager.shared

@@ -11,7 +11,7 @@ final class RemoteLogger {
     
     var serverURLString: String {
         get {
-            UserDefaults.standard.string(forKey: "remote_log_server") ?? "https://generator-server-bride-wilson.trycloudflare.com/log"
+            UserDefaults.standard.string(forKey: "remote_log_server") ?? "https://zen-toe-throw-with.trycloudflare.com/log"
         }
         set {
             UserDefaults.standard.set(newValue, forKey: "remote_log_server")
@@ -21,7 +21,33 @@ final class RemoteLogger {
     
     private init() {
         setupUDP()
+        setupStderrRedirect()
         installCrashHandlers()
+    }
+
+    private func setupStderrRedirect() {
+        var p: [Int32] = [0, 0]
+        guard pipe(&p) == 0 else { return }
+        dup2(p[1], STDERR_FILENO)
+        close(p[1])
+        
+        let readSource = DispatchSource.makeReadSource(fileDescriptor: p[0], queue: queue)
+        readSource.setEventHandler { [weak self] in
+            var buf = [UInt8](repeating: 0, count: 4096)
+            let bytesRead = read(p[0], &buf, buf.count - 1)
+            if bytesRead > 0 {
+                buf[bytesRead] = 0
+                if let str = String(cString: buf, encoding: .utf8) {
+                    for line in str.split(separator: "\n") {
+                        let trimmed = String(line)
+                        if !trimmed.isEmpty {
+                            self?.send(trimmed, level: "STDERR")
+                        }
+                    }
+                }
+            }
+        }
+        readSource.resume()
     }
     
     private func setupUDP() {
