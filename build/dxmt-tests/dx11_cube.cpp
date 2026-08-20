@@ -15,7 +15,8 @@
     char _buf[512]; \
     int _len = snprintf(_buf, sizeof(_buf), __VA_ARGS__); \
     OutputDebugStringA(_buf); \
-    write(2, _buf, _len); \
+    fprintf(stderr, "%s", _buf); \
+    fflush(stderr); \
 } while(0)
 
 #include "3DMaths.h"
@@ -318,8 +319,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
 
             DXGI_ADAPTER_DESC adapterDesc;
             dxgiAdapter->GetDesc(&adapterDesc);
-
-            for (int i = 0; i < 128 && adapterDesc.Description[i]; i++)
 
             hResult = dxgiAdapter->GetParent(__uuidof(IDXGIFactory2), (void**)&dxgiFactory);
             assert(SUCCEEDED(hResult));
