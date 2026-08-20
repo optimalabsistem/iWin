@@ -755,7 +755,7 @@ index 8c7e00f..2d370d2 100644
  
  extern BOOL WINAPI DllMainCRTStartup(HANDLE hDllHandle, DWORD dwReason,
 diff --git a/src/winemetal/unix/winemetal_unix.c b/src/winemetal/unix/winemetal_unix.c
-index 30cb25d..a610bcd 100644
+index 30cb25d..74c731b 100644
 --- a/src/winemetal/unix/winemetal_unix.c
 +++ b/src/winemetal/unix/winemetal_unix.c
 @@ -48,11 +48,7 @@ typedef int NTSTATUS;
@@ -812,7 +812,12 @@ index 30cb25d..a610bcd 100644
    params->ret_error = (obj_handle_t)err;
    return STATUS_SUCCESS;
  }
-@@ -1928,6 +1949,8 @@ struct macdrv_functions_t {
+@@ -1925,9 +1946,13 @@ struct macdrv_functions_t {
+   void (*on_main_thread)(dispatch_block_t b);
+ };
+ 
++extern CAMetalLayer *mythic_display_get_layer(void) __attribute__((weak));
++
  static NTSTATUS
  _CreateMetalViewFromHWND(void *obj) {
    struct unixcall_create_metal_view_from_hwnd *params = obj;
@@ -821,7 +826,7 @@ index 30cb25d..a610bcd 100644
  
    struct macdrv_win_data *(*pfn_get_win_data)(HWND hwnd) = NULL;
    void (*pfn_release_win_data)(struct macdrv_win_data *data) = NULL;
-@@ -1955,8 +1978,16 @@ _CreateMetalViewFromHWND(void *obj) {
+@@ -1955,8 +1980,26 @@ _CreateMetalViewFromHWND(void *obj) {
      params->ret_view = (obj_handle_t)view;
      if (view) {
        params->ret_layer = (obj_handle_t)pfn_macdrv_view_get_metal_layer(view);
@@ -835,16 +840,33 @@ index 30cb25d..a610bcd 100644
 +  } else {
 +    dprintf(2, "[STEP-1-D3D11] winemetal _CreateMetalViewFromHWND FAILED symbol lookup (macdrv=%p pfn_view=%p)\n",
 +            macdrv_functions, pfn_macdrv_view_create_metal_view);
++  }
++
++  if (!params->ret_layer && mythic_display_get_layer) {
++    CAMetalLayer *layer = mythic_display_get_layer();
++    if (layer) {
++      params->ret_layer = (obj_handle_t)layer;
++      params->ret_view = (obj_handle_t)layer;
++      dprintf(2, "[STEP-2-METAL-LAYER] winemetal _CreateMetalViewFromHWND fallback to mythic_display_get_layer: layer=%p\n",
++              (void *)layer);
++    }
    }
  
    return STATUS_SUCCESS;
 diff --git a/tests/dx11/dx11_cube.cpp b/tests/dx11/dx11_cube.cpp
-index 000d75a..5a7a796 100644
+index 000d75a..927c0a6 100644
 --- a/tests/dx11/dx11_cube.cpp
 +++ b/tests/dx11/dx11_cube.cpp
-@@ -8,19 +8,9 @@
+@@ -4,23 +4,18 @@
+ #include <windows.h>
+ #include <d3d11_1.h>
+ #include <d3dcompiler.h>
++#include <unistd.h>
+ 
  #include <assert.h>
  #include <stdint.h>
++#include <stdio.h>
++#include <string.h>
  
 -/* Atomic single-syscall trace: format then issue ONE WriteFile to stderr.
 - * fprintf+fflush gets interleaved on iOS where ntdll's syscall trace
@@ -859,12 +881,14 @@ index 000d75a..5a7a796 100644
 -                  (DWORD)(_n < (int)sizeof(_buf) ? _n : (int)sizeof(_buf)), \
 -                  &_written, NULL); \
 -    } \
-+    fprintf(stderr, __VA_ARGS__); \
-+    fflush(stderr); \
++    char _buf[512]; \
++    int _len = snprintf(_buf, sizeof(_buf), __VA_ARGS__); \
++    OutputDebugStringA(_buf); \
++    write(2, _buf, _len); \
  } while(0)
  
  #include "3DMaths.h"
-@@ -232,24 +222,27 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
+@@ -232,24 +227,27 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
              return GetLastError();
          }
  
@@ -899,7 +923,7 @@ index 000d75a..5a7a796 100644
      }
  
      // Create D3D11 Device and Context
-@@ -264,11 +257,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
+@@ -264,11 +262,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
          creationFlags |= D3D11_CREATE_DEVICE_DEBUG;
          #endif
  
@@ -914,7 +938,7 @@ index 000d75a..5a7a796 100644
          if(FAILED(hResult)){
              MessageBoxA(0, "D3D11CreateDevice() failed", "Fatal Error", MB_OK);
              return GetLastError();
-@@ -339,7 +335,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
+@@ -339,7 +340,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
          d3d11SwapChainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
          d3d11SwapChainDesc.Flags = 0;
  
@@ -925,7 +949,7 @@ index 000d75a..5a7a796 100644
          assert(SUCCEEDED(hResult));
  
          dxgiFactory->Release();
-@@ -349,6 +348,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
+@@ -349,6 +353,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
      ID3D11RenderTargetView* d3d11FrameBufferView;
      ID3D11DepthStencilView* depthBufferView;
      win32CreateD3D11RenderTargets(d3d11Device, d3d11SwapChain, &d3d11FrameBufferView, &depthBufferView);
@@ -934,16 +958,16 @@ index 000d75a..5a7a796 100644
  
      UINT shaderCompileFlags = 0;
      // Compiling with this flag allows debugging shaders with Visual Studio
-@@ -685,7 +686,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
+@@ -685,7 +691,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
          constants->modelViewProj = modelViewProj;
          d3d11DeviceContext->Unmap(constantBuffer, 0);
  
 -        FLOAT backgroundColor[4] = { 0.1f, 0.2f, 0.6f, 1.0f };
-+        FLOAT backgroundColor[4] = { 0.1f, 0.35f, 0.95f, 1.0f };
++        FLOAT backgroundColor[4] = { 0.05f, 0.05f, 0.2f, 1.0f };
          d3d11DeviceContext->ClearRenderTargetView(d3d11FrameBufferView, backgroundColor);
          
          d3d11DeviceContext->ClearDepthStencilView(depthBufferView, D3D11_CLEAR_DEPTH, 1.0f, 0);
-@@ -779,7 +780,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
+@@ -779,7 +785,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpC
              }
          }
  

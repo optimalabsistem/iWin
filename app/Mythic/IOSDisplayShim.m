@@ -57,6 +57,13 @@ void mythic_display_set_layer(CAMetalLayer *layer) {
             layer ? layer.drawableSize.width : 0, layer ? layer.drawableSize.height : 0);
 }
 
+CAMetalLayer *mythic_display_get_layer(void) {
+    pthread_mutex_lock(&g_lock);
+    CAMetalLayer *layer = g_layer;
+    pthread_mutex_unlock(&g_lock);
+    return layer;
+}
+
 // --- macdrv_* implementations ---
 
 // DXMT only dereferences client_cocoa_view (passing it straight back to

@@ -15,6 +15,7 @@
 // Register the CAMetalLayer that DXMT-rendered content should go into.
 // Must be called before the first D3D11 swapchain is created.
 void mythic_display_set_layer(CAMetalLayer *layer);
+CAMetalLayer *mythic_display_get_layer(void);
 #endif
 
 #endif
