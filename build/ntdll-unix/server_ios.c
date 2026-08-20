@@ -1772,10 +1772,11 @@ int server_get_unix_fd( HANDLE handle, unsigned int wanted_access, int *unix_fd,
                      * handle doesn't match the requested one, we'd silently
                      * mis-cache (assert is compiled out) — log it. */
                     if (wine_server_ptr_handle(fd_handle) != handle)
+                    {
                         dprintf(2, "[fd-recv] HANDLE MISMATCH: asked %p got %p (fd=%d peb=%p)\n",
                                 handle, wine_server_ptr_handle(fd_handle), fd,
                                 ios_jit_current_peb());
-                    assert( wine_server_ptr_handle(fd_handle) == handle );
+                    }
                     *needs_close = (!reply->cacheable ||
                                     !add_fd_to_cache( handle, fd, reply->type,
                                                       reply->access, reply->options ));
@@ -2497,7 +2498,8 @@ size_t server_init_process(void)
             if (reply->inproc_device)
             {
                 inproc_device_fd = wine_server_receive_fd( &handle );
-                assert( handle == reply->inproc_device );
+                if (handle != reply->inproc_device)
+                    ERR("inproc_device handle mismatch: %x vs %x (fd=%d)\n", handle, reply->inproc_device, inproc_device_fd);
             }
         }
     }

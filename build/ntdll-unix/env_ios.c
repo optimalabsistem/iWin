@@ -1912,7 +1912,7 @@ static void *build_wow64_parameters( const RTL_USER_PROCESS_PARAMETERS *params )
 
     status = NtAllocateVirtualMemory( NtCurrentProcess(), (void **)&wow64_params, limit_2g - 1, &size,
                                       MEM_COMMIT, PAGE_READWRITE );
-    assert( !status );
+    if (status) { ERR("NtAllocateVirtualMemory wow64_params failed: 0x%lx\n", (unsigned long)status); return status; }
 
     wow64_params->AllocationSize  = size;
     wow64_params->Size            = size;
@@ -2153,7 +2153,7 @@ static RTL_USER_PROCESS_PARAMETERS *build_initial_params( void **module )
 
     status = NtAllocateVirtualMemory( NtCurrentProcess(), (void **)&params, 0, &size,
                                       MEM_COMMIT, PAGE_READWRITE );
-    assert( !status );
+    if (status) { ERR("NtAllocateVirtualMemory params failed: 0x%lx\n", (unsigned long)status); return NULL; }
 
     params->AllocationSize  = size;
     params->Size            = size;
@@ -2240,7 +2240,7 @@ void unix_init_startup_info(void)
         env_size = (wine_server_reply_size( reply ) - info_size) / sizeof(WCHAR);
     }
     SERVER_END_REQ;
-    assert( !status );
+    if (status) { ERR("get_startup_info failed: 0x%lx\n", (unsigned long)status); free(info); return; }
 
     env = malloc( env_size * sizeof(WCHAR) );
     memcpy( env, (char *)info + info_size, env_size * sizeof(WCHAR) );
@@ -2262,7 +2262,7 @@ void unix_init_startup_info(void)
 
     status = NtAllocateVirtualMemory( NtCurrentProcess(), (void **)&params, 0, &size,
                                       MEM_COMMIT, PAGE_READWRITE );
-    assert( !status );
+    if (status) { ERR("NtAllocateVirtualMemory params (startup_info) failed: 0x%lx\n", (unsigned long)status); free(info); free(env); return; }
 
     params->AllocationSize  = size;
     params->Size            = size;

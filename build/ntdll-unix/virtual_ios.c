@@ -9582,7 +9582,7 @@ static NTSTATUS map_view( struct file_view **view_ret, void *base, size_t size,
     NTSTATUS status;
 
     if (!align_mask) align_mask = granularity_mask;
-    assert( align_mask >= host_page_mask );
+    if (align_mask < host_page_mask) align_mask = host_page_mask;
 
     if (alloc_type & MEM_REPLACE_PLACEHOLDER)
     {
